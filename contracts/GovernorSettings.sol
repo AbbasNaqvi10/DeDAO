@@ -14,20 +14,23 @@ abstract contract GovernorSettings is Governor {
     uint256 private _votingDelay;
     uint256 private _votingPeriod;
     uint256 private _proposalThreshold;
+    uint256 private _minTokensForProposal;
     uint256 private _minParticipation;
 
     event VotingDelaySet(uint256 oldVotingDelay, uint256 newVotingDelay);
     event VotingPeriodSet(uint256 oldVotingPeriod, uint256 newVotingPeriod);
     event ProposalThresholdSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
+    event MinTokensForProposalSet(uint256 oldMinTokensForProposal, uint256 newMinTokensForProposal);
     event MinParticipationSet(uint256 oldMinParticipation, uint256 newMinParticipation);
 
     /**
      * @dev Initialize the governance parameters.
      */
-    constructor(uint256 initialVotingDelay, uint256 initialVotingPeriod, uint256 initialProposalThreshold, uint256 initialMinParticipation) {
+    constructor(uint256 initialVotingDelay, uint256 initialVotingPeriod, uint256 initialProposalThreshold, uint256 initialMinTokensForProposal, uint256 initialMinParticipation) {
         _setVotingDelay(initialVotingDelay);
         _setVotingPeriod(initialVotingPeriod);
         _setProposalThreshold(initialProposalThreshold);
+        _setMinTokensForProposal(initialMinTokensForProposal);
         _setMinParticipation(initialMinParticipation);
     }
 
@@ -50,6 +53,13 @@ abstract contract GovernorSettings is Governor {
      */
     function proposalThreshold() public view virtual override returns (uint256) {
         return _proposalThreshold;
+    }
+
+    /**
+     * @dev See {Governor-numberOfTokensForProposal}.
+     */
+    function minTokensForProposal() public view virtual returns (uint256) {
+        return _minTokensForProposal;
     }
 
     /**
@@ -84,6 +94,15 @@ abstract contract GovernorSettings is Governor {
      */
     function setProposalThreshold(uint256 newProposalThreshold) public virtual onlyGovernance {
         _setProposalThreshold(newProposalThreshold);
+    }
+
+    /**
+     * @dev Update the proposal threshold. This operation can only be performed through a governance proposal.
+     *
+     * Emits a {MinTokensForProposalSet} event.
+     */
+    function setMinTokensForPropopsal(uint256 newMinTokensForProposal) public virtual onlyGovernance {
+        _setMinTokensForProposal(newMinTokensForProposal);
     }
 
     /**
@@ -125,6 +144,16 @@ abstract contract GovernorSettings is Governor {
     function _setProposalThreshold(uint256 newProposalThreshold) internal virtual {
         emit ProposalThresholdSet(_proposalThreshold, newProposalThreshold);
         _proposalThreshold = newProposalThreshold;
+    }
+
+    /**
+     * @dev Internal setter for the proposal threshold.
+     *
+     * Emits a {MinTokensForProposalSet} event.
+     */
+    function _setMinTokensForProposal(uint256 newMinTokensForProposal) internal virtual {
+        emit MinTokensForProposalSet(_minTokensForProposal, newMinTokensForProposal);
+        _minTokensForProposal = newMinTokensForProposal;
     }
 
     /**

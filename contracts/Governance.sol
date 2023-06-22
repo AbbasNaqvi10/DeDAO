@@ -21,6 +21,7 @@ contract MyDao is
         uint256 _votingDelay,
         uint256 _votingPeriod,
         uint256 _proposalThreshold,
+        uint256 _minTokensForProposal,
         uint256 _minParticipation,
         TimelockController _timelock
     )
@@ -29,6 +30,7 @@ contract MyDao is
             _votingDelay,
             _votingPeriod,
             _proposalThreshold,
+            _minTokensForProposal,
             _minParticipation
         )
         GovernorTimelockControl(_timelock)
