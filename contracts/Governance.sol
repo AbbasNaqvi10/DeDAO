@@ -7,13 +7,27 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
 import "./GovernorSettings.sol";
 
-contract MyDao is
+contract Governance is
     Governor,
     GovernorSettings,
     GovernorCountingSimple,
     GovernorTimelockControl
 {
-    IERC20 public daoToken;
+    IERC20 public token;
+
+    struct ProposerStake {
+        address creator;
+        uint256 amountStaked;
+        uint256 blockNumberDurationStart;
+        uint256 blockNumberDurationEnd;
+    }
+    struct VoterStake {
+        uint256 amountStaked;
+        uint256 blockNumberDurationEnd;
+    }
+
+    mapping(uint256 => ProposerStake) private _proposalSnapshot;
+    mapping(uint256 => mapping(address => VoterStake)) private _votingSnapshot;
 
     constructor(
         string memory _name,
@@ -35,7 +49,7 @@ contract MyDao is
         )
         GovernorTimelockControl(_timelock)
     {
-        daoToken = IERC20(_token);
+        token = IERC20(_token);
     }
 
     // The following functions are overrides required by Solidity.
@@ -56,6 +70,14 @@ contract MyDao is
         returns (uint256)
     {
         return super.votingPeriod();
+    }
+
+    function _getVotes(
+        address account,
+        uint256 timepoint,
+        bytes memory params
+    ) internal view virtual override returns (uint256) {
+        return token.balanceOf(account);
     }
 
     // function quorum(
@@ -86,7 +108,25 @@ contract MyDao is
         bytes[] memory calldatas,
         string memory description
     ) public override(Governor, IGovernor) returns (uint256) {
-        return super.propose(targets, values, calldatas, description);
+        require(
+            token.balanceOf(_msgSender()) >= minTokensForProposal(),
+            "Not have enough tokens to create proposal"
+        );
+        token.transfer(address(this), minTokensForProposal());
+        uint256 proposalId = super.propose(
+            targets,
+            values,
+            calldatas,
+            description
+        );
+        _proposalSnapshot[proposalId] = ProposerStake({
+        creator: _msgSender(),
+        amountStaked: minTokensForProposal(),
+        blockNumberDurationStart: proposalSnapshot(proposalId),
+        blockNumberDurationEnd: proposalSnapshot(proposalId) + votingPeriod()
+        });
+
+        return proposalId;
     }
 
     function proposalThreshold()
@@ -106,6 +146,9 @@ contract MyDao is
         bytes32 descriptionHash
     ) internal override(Governor, GovernorTimelockControl) {
         super._execute(proposalId, targets, values, calldatas, descriptionHash);
+        if(state(proposalId) == ProposalState.Executed){
+            token.transferFrom(address(this), _proposalSnapshot[proposalId].creator, _proposalSnapshot[proposalId].amountStaked);
+        }
     }
 
     function _cancel(
@@ -132,7 +175,9 @@ contract MyDao is
         return super.supportsInterface(interfaceId);
     }
 
-    function clock() public view override returns (uint48) {}
+    function clock() public view override returns (uint48) {
+        return SafeCast.toUint48(block.number);
+    }
 
     function CLOCK_MODE() public view override returns (string memory) {}
 
@@ -140,9 +185,4 @@ contract MyDao is
         uint256 timepoint
     ) public view virtual override returns (uint256) {}
 
-    function _getVotes(
-        address account,
-        uint256 timepoint,
-        bytes memory params
-    ) internal view virtual override returns (uint256) {}
 }
