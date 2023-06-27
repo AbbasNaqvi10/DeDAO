@@ -3,14 +3,14 @@
 
 pragma solidity ^0.8.9;
 
-import "@openzeppelin/contracts/governance/Governor.sol";
+import "./Governance.sol";
 
 /**
  * @dev Extension of {Governor} for settings updatable through governance.
  *
  * _Available since v4.4._
  */
-abstract contract GovernorSettings is Governor {
+abstract contract GovernorSettings is Governance {
     uint256 private _votingDelay;
     uint256 private _votingPeriod;
     uint256 private _proposalThreshold;
