@@ -68,15 +68,6 @@ contract Dao is
     {
         return super.votingPeriod();
     }
-
-    function _getVotes(
-        address account,
-        uint256 timepoint,
-        bytes memory params
-    ) internal view virtual override returns (uint256) {
-        return token.balanceOf(account);
-    }
-
     // function quorum(
     //     uint256 blockNumber
     // )

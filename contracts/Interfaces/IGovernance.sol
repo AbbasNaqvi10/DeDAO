@@ -200,25 +200,6 @@ abstract contract IGovernance is IERC165, IERC6372 {
     function quorum(uint256 timepoint) public view virtual returns (uint256);
 
     /**
-     * @notice module:reputation
-     * @dev Voting power of an `account` at a specific `timepoint`.
-     *
-     * Note: this can be implemented in a number of ways, for example by reading the delegated balance from one (or
-     * multiple), {ERC20Votes} tokens.
-     */
-    function getVotes(address account, uint256 timepoint) public view virtual returns (uint256);
-
-    /**
-     * @notice module:reputation
-     * @dev Voting power of an `account` at a specific `timepoint` given additional encoded parameters.
-     */
-    function getVotesWithParams(
-        address account,
-        uint256 timepoint,
-        bytes memory params
-    ) public view virtual returns (uint256);
-
-    /**
      * @notice module:voting
      * @dev Returns whether `account` has cast a vote on `proposalId`.
      */

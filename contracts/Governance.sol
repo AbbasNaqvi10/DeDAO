@@ -107,40 +107,6 @@ abstract contract Governance is
     }
 
     /**
-     * @dev See {IERC165-supportsInterface}.
-     */
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view virtual override(IERC165, ERC165) returns (bool) {
-        bytes4 governorCancelId = this.cancel.selector ^
-            this.proposalProposer.selector;
-
-        bytes4 governorParamsId = this.castVoteWithReasonAndParams.selector ^
-            this.castVoteWithReasonAndParamsBySig.selector ^
-            this.getVotesWithParams.selector;
-
-        // The original interface id in v4.3.
-        bytes4 governor43Id = type(IGovernance).interfaceId ^
-            type(IERC6372).interfaceId ^
-            governorCancelId ^
-            governorParamsId;
-
-        // An updated interface id in v4.6, with params added.
-        bytes4 governor46Id = type(IGovernance).interfaceId ^
-            type(IERC6372).interfaceId ^
-            governorCancelId;
-
-        // For the updated interface id in v4.9, we use governorCancelId directly.
-
-        return
-            interfaceId == governor43Id ||
-            interfaceId == governor46Id ||
-            interfaceId == governorCancelId ||
-            interfaceId == type(IERC1155Receiver).interfaceId ||
-            super.supportsInterface(interfaceId);
-    }
-
-    /**
      * @dev See {IGovernor-name}.
      */
     function name() public view virtual override returns (string memory) {
@@ -271,15 +237,6 @@ abstract contract Governance is
     ) internal view virtual returns (bool);
 
     /**
-     * @dev Get the voting weight of `account` at a specific `timepoint`, for a vote as described by `params`.
-     */
-    function _getVotes(
-        address account,
-        uint256 timepoint,
-        bytes memory params
-    ) internal view virtual returns (uint256);
-
-    /**
      * @dev Register a vote for `proposalId` by `account` with a given `support`, voting `weight` and voting `params`.
      *
      * Note: Support is generic and can represent various things depending on the voting system used.
@@ -318,10 +275,6 @@ abstract contract Governance is
         );
 
         uint256 currentTimepoint = clock();
-        require(
-            getVotes(proposer, currentTimepoint - 1) >= proposalThreshold(),
-            "Governor: proposer votes below proposal threshold"
-        );
 
         uint256 proposalId = hashProposal(
             targets,
@@ -518,27 +471,6 @@ abstract contract Governance is
         emit ProposalCanceled(proposalId);
 
         return proposalId;
-    }
-
-    /**
-     * @dev See {IGovernor-getVotes}.
-     */
-    function getVotes(
-        address account,
-        uint256 timepoint
-    ) public view virtual override returns (uint256) {
-        return _getVotes(account, timepoint, _defaultParams());
-    }
-
-    /**
-     * @dev See {IGovernor-getVotesWithParams}.
-     */
-    function getVotesWithParams(
-        address account,
-        uint256 timepoint,
-        bytes memory params
-    ) public view virtual override returns (uint256) {
-        return _getVotes(account, timepoint, params);
     }
 
     function castVoteWithWeight(
