@@ -54,6 +54,18 @@ abstract contract GovernanceCountingSimple is Governance {
         return (proposalVote.againstVotes, proposalVote.forVotes, proposalVote.abstainVotes);
     }
 
+    function proposalThresholdReached(uint256 proposalId) public view virtual returns (uint256) {
+        (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes) = proposalVotes(proposalId);
+        uint256 threshold = (forVotes/(againstVotes+forVotes+abstainVotes))*100;
+        return threshold;
+    }
+
+    function _proposalThresholdReached(uint256 proposalId) internal view virtual override returns (bool) {
+        (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes) = proposalVotes(proposalId);
+        uint256 threshold = (forVotes/(againstVotes+forVotes+abstainVotes))*100;
+        return threshold >= super.proposalThreshold();
+    }
+
     /**
      * @dev See {Governor-_quorumReached}.
      */

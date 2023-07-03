@@ -7,7 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./GovernanceSetting.sol";
 
 contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
-    IERC20 public token;
+    IERC20 public DAOToken;
+    address public token;
 
     struct ProposerStake {
         address creator;
@@ -18,6 +19,16 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
 
     mapping(uint256 => ProposerStake) private _proposalSnapshot;
     mapping(uint256 => mapping(address => uint256)) private _votingSnapshot;
+
+    event ProposalCreated(uint256 proposaId, address proposer);
+    event VoteCast(
+        uint256 proposalId,
+        uint256 weight,
+        uint8 support,
+        address voter
+    );
+    event Execute(uint256 proposalId);
+    event Withdraw(uint256 proposalId, address _to, uint256 amount);
 
     constructor(
         string memory _name,
@@ -37,7 +48,8 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
             _minParticipation
         )
     {
-        token = IERC20(_token);
+        token = _token;
+        DAOToken = IERC20(token);
     }
 
     // The following functions are overrides required by Solidity.
@@ -79,10 +91,14 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
         string memory description
     ) public virtual override returns (uint256) {
         require(
-            token.balanceOf(_msgSender()) >= minTokensForProposal(),
+            DAOToken.balanceOf(_msgSender()) >= minTokensForProposal(),
             "Not have enough tokens to create proposal"
         );
-        token.transferFrom(_msgSender(), address(this), minTokensForProposal());
+        DAOToken.transferFrom(
+            _msgSender(),
+            address(this),
+            minTokensForProposal()
+        );
         uint256 proposalId = super.propose(
             targets,
             values,
@@ -97,6 +113,8 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
                 votingPeriod()
         });
 
+        emit ProposalCreated(proposalId, _msgSender());
+
         return proposalId;
     }
 
@@ -105,12 +123,14 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
         uint8 support,
         uint256 weight
     ) public virtual returns (uint256) {
-        uint256 userBalance = token.balanceOf(_msgSender());
+        uint256 userBalance = DAOToken.balanceOf(_msgSender());
         require(userBalance >= 0, "You do not have tokens to vote");
         require(userBalance >= weight, "Not have enough power");
         address voter = _msgSender();
-        _votingSnapshot[proposalId][_msgSender()] = userBalance;
-        token.transferFrom(_msgSender(), address(this), weight);
+        _votingSnapshot[proposalId][_msgSender()] = weight;
+        DAOToken.transferFrom(_msgSender(), address(this), weight);
+
+        emit VoteCast(proposalId, weight, support, _msgSender());
 
         return castVoteWithWeight(proposalId, voter, support, weight);
     }
@@ -122,15 +142,44 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
         bytes[] memory calldatas,
         bytes32 descriptionHash
     ) internal virtual override {
-        require(_quorumReached(proposalId), "Min participation not reached");
-        require(_voteSucceeded(proposalId), "Proposal not succeeded");
+        require(state(proposalId) == ProposalState.Succeeded);
         super._execute(proposalId, targets, values, calldatas, descriptionHash);
+
+        emit Execute(proposalId);
+
         require(state(proposalId) == ProposalState.Executed);
-        token.transferFrom(
+        DAOToken.transferFrom(
             address(this),
             _proposalSnapshot[proposalId].creator,
             _proposalSnapshot[proposalId].amountStaked
         );
+    }
+
+    function proposerWithdraw(uint256 proposalId) external {
+        require(
+            state(proposalId) == ProposalState.Expired,
+            "Proposal isn't expired yet"
+        );
+        require(_proposalSnapshot[proposalId].creator == _msgSender());
+        uint256 amount = _proposalSnapshot[proposalId].amountStaked;
+        DAOToken.transferFrom(address(this), _msgSender(), amount);
+        _proposalSnapshot[proposalId].amountStaked = 0;
+        emit Withdraw(proposalId, _msgSender(), amount);
+    }
+
+    function withdraw(uint256 proposalId) external {
+        require(
+            state(proposalId) == ProposalState.Executed,
+            "Proposal isn't executed yet"
+        );
+        require(
+            _votingSnapshot[proposalId][_msgSender()] > 0,
+            "Account not have any stake amount in this proposal"
+        );
+        uint256 amount = _votingSnapshot[proposalId][_msgSender()];
+        DAOToken.transferFrom(address(this), _msgSender(), amount);
+        _votingSnapshot[proposalId][_msgSender()] = 0;
+        emit Withdraw(proposalId, _msgSender(), amount);
     }
 
     function clock() public view override returns (uint48) {

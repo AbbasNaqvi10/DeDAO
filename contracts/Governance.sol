@@ -181,11 +181,23 @@ abstract contract Governance is
             return ProposalState.Active;
         }
 
-        if (_quorumReached(proposalId) && _voteSucceeded(proposalId)) {
-            return ProposalState.Succeeded;
-        } else {
-            return ProposalState.Defeated;
+        if (
+            deadline <= currentTimepoint &&
+            (!_quorumReached(proposalId) ||
+                !_voteSucceeded(proposalId) ||
+                !_proposalThresholdReached(proposalId))
+        ) {
+            return ProposalState.Expired;
         }
+            if (
+                _quorumReached(proposalId) &&
+                _voteSucceeded(proposalId) &&
+                _proposalThresholdReached(proposalId)
+            ) {
+                return ProposalState.Succeeded;
+            } else {
+                return ProposalState.Defeated;
+            }
     }
 
     /**
@@ -226,6 +238,10 @@ abstract contract Governance is
      * @dev Amount of votes already cast passes the threshold limit.
      */
     function _quorumReached(
+        uint256 proposalId
+    ) internal view virtual returns (bool);
+
+    function _proposalThresholdReached(
         uint256 proposalId
     ) internal view virtual returns (bool);
 
