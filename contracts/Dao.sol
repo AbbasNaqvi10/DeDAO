@@ -4,16 +4,9 @@ pragma solidity ^0.8.0;
 import "./Governance.sol";
 import "./GovernanceCountingSimple.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "./GovernorSettings.sol";
-import "@openzeppelin/contracts/governance/extensions/GovernorTimelockControl.sol";
+import "./GovernanceSetting.sol";
 
-
-contract Dao is
-    Governance,
-    GovernorSettings,
-    GovernorCountingSimple,
-    GovernorTimelockControl
-{
+contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
     IERC20 public token;
 
     struct ProposerStake {
@@ -33,18 +26,16 @@ contract Dao is
         uint256 _votingPeriod,
         uint256 _proposalThreshold,
         uint256 _minTokensForProposal,
-        uint256 _minParticipation,
-        TimelockController _timelock
+        uint256 _minParticipation
     )
         Governance(_name)
-        GovernorSettings(
+        GovernanceSettings(
             _votingDelay,
             _votingPeriod,
             _proposalThreshold,
             _minTokensForProposal,
             _minParticipation
         )
-        GovernorTimelockControl(_timelock)
     {
         token = IERC20(_token);
     }
@@ -54,7 +45,7 @@ contract Dao is
     function votingDelay()
         public
         view
-        override(IGovernor, GovernorSettings)
+        override(IGovernance, GovernanceSettings)
         returns (uint256)
     {
         return super.votingDelay();
@@ -63,39 +54,30 @@ contract Dao is
     function votingPeriod()
         public
         view
-        override(IGovernor, GovernorSettings)
+        override(IGovernance, GovernanceSettings)
         returns (uint256)
     {
         return super.votingPeriod();
     }
-    // function quorum(
-    //     uint256 blockNumber
-    // )
-    //     public
-    //     view
-    //     override(IGovernor, GovernorVotesQuorumFraction)
-    //     returns (uint256)
-    // {
-    //     return super.quorum(blockNumber);
-    // }
 
-    function state(
-        uint256 proposalId
-    )
+    function proposalThreshold()
         public
         view
-        override(Governor, GovernorTimelockControl)
-        returns (ProposalState)
+        override(Governance, GovernanceSettings)
+        returns (uint256)
     {
-        return super.state(proposalId);
+        return super.proposalThreshold();
     }
 
+    /**
+     * @dev See {IGovernor-propose}. This function has opt-in frontrunning protection, described in {_isValidDescriptionForProposer}.
+     */
     function propose(
         address[] memory targets,
         uint256[] memory values,
         bytes[] memory calldatas,
         string memory description
-    ) public override(Governor, IGovernor) returns (uint256) {
+    ) public virtual override returns (uint256) {
         require(
             token.balanceOf(_msgSender()) >= minTokensForProposal(),
             "Not have enough tokens to create proposal"
@@ -108,25 +90,21 @@ contract Dao is
             description
         );
         _proposalSnapshot[proposalId] = ProposerStake({
-        creator: _msgSender(),
-        amountStaked: minTokensForProposal(),
-        blockNumberDurationStart: proposalSnapshot(proposalId),
-        blockNumberDurationEnd: proposalSnapshot(proposalId) + votingPeriod()
+            creator: _msgSender(),
+            amountStaked: minTokensForProposal(),
+            blockNumberDurationStart: proposalSnapshot(proposalId),
+            blockNumberDurationEnd: proposalSnapshot(proposalId) +
+                votingPeriod()
         });
 
         return proposalId;
     }
 
-    function proposalThreshold()
-        public
-        view
-        override(Governor, GovernorSettings)
-        returns (uint256)
-    {
-        return super.proposalThreshold();
-    }
-
-    function castVote(uint256 proposalId, uint8 support, uint256 weight) public virtual returns (uint256) {
+    function castVote(
+        uint256 proposalId,
+        uint8 support,
+        uint256 weight
+    ) public virtual returns (uint256) {
         uint256 userBalance = token.balanceOf(_msgSender());
         require(userBalance >= 0, "You do not have tokens to vote");
         require(userBalance >= weight, "Not have enough power");
@@ -134,7 +112,7 @@ contract Dao is
         _votingSnapshot[proposalId][_msgSender()] = userBalance;
         token.transferFrom(_msgSender(), address(this), weight);
 
-        return castVoteWithWeight(proposalId, voter, support, weight, "", _defaultParams());
+        return castVoteWithWeight(proposalId, voter, support, weight);
     }
 
     function _execute(
@@ -143,35 +121,16 @@ contract Dao is
         uint256[] memory values,
         bytes[] memory calldatas,
         bytes32 descriptionHash
-    ) internal override(Governor, GovernorTimelockControl) {
+    ) internal virtual override {
+        require(_quorumReached(proposalId), "Min participation not reached");
+        require(_voteSucceeded(proposalId), "Proposal not succeeded");
         super._execute(proposalId, targets, values, calldatas, descriptionHash);
-        if(state(proposalId) == ProposalState.Executed){
-            token.transferFrom(address(this), _proposalSnapshot[proposalId].creator, _proposalSnapshot[proposalId].amountStaked);
-        }
-    }
-
-    function _cancel(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        bytes32 descriptionHash
-    ) internal override(Governor, GovernorTimelockControl) returns (uint256) {
-        return super._cancel(targets, values, calldatas, descriptionHash);
-    }
-
-    function _executor()
-        internal
-        view
-        override(Governor, GovernorTimelockControl)
-        returns (address)
-    {
-        return super._executor();
-    }
-
-    function supportsInterface(
-        bytes4 interfaceId
-    ) public view override(Governor, GovernorTimelockControl) returns (bool) {
-        return super.supportsInterface(interfaceId);
+        require(state(proposalId) == ProposalState.Executed);
+        token.transferFrom(
+            address(this),
+            _proposalSnapshot[proposalId].creator,
+            _proposalSnapshot[proposalId].amountStaked
+        );
     }
 
     function clock() public view override returns (uint48) {
@@ -182,6 +141,7 @@ contract Dao is
 
     function quorum(
         uint256 timepoint
-    ) public view virtual override returns (uint256) {}
-
+    ) public view virtual override returns (uint256) {
+        return minParticipation();
+    }
 }

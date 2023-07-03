@@ -10,7 +10,7 @@ import "./Governance.sol";
  *
  * _Available since v4.3._
  */
-abstract contract GovernorCountingSimple is Governance {
+abstract contract GovernanceCountingSimple is Governance {
     /**
      * @dev Supported vote types. Matches Governor Bravo ordering.
      */

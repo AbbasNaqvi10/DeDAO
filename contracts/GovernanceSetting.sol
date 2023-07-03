@@ -10,7 +10,7 @@ import "./Governance.sol";
  *
  * _Available since v4.4._
  */
-abstract contract GovernorSettings is Governance {
+abstract contract GovernanceSettings is Governance {
     uint256 private _votingDelay;
     uint256 private _votingPeriod;
     uint256 private _proposalThreshold;
