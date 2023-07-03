@@ -157,10 +157,11 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
 
     function proposerWithdraw(uint256 proposalId) external {
         require(
-            state(proposalId) == ProposalState.Expired,
+            state(proposalId) == ProposalState.Expired || state(proposalId) == ProposalState.Canceled,
             "Proposal isn't expired yet"
         );
         require(_proposalSnapshot[proposalId].creator == _msgSender());
+        require(_proposalSnapshot[proposalId].amountStaked > 0,"Not have any stake amount for this proposal");
         uint256 amount = _proposalSnapshot[proposalId].amountStaked;
         DAOToken.transferFrom(address(this), _msgSender(), amount);
         _proposalSnapshot[proposalId].amountStaked = 0;
