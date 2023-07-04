@@ -3,6 +3,7 @@ pragma solidity ^0.8.17;
 
 import "./Governance.sol";
 import "./GovernanceCountingSimple.sol";
+import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "./GovernanceSetting.sol";
 
@@ -20,14 +21,12 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
     mapping(uint256 => ProposerStake) private _proposalSnapshot;
     mapping(uint256 => mapping(address => uint256)) private _votingSnapshot;
 
-    event ProposalCreated(uint256 proposaId, address proposer);
     event VoteCast(
         uint256 proposalId,
         uint256 weight,
         uint8 support,
         address voter
     );
-    event Execute(uint256 proposalId);
     event Withdraw(uint256 proposalId, address _to, uint256 amount);
 
     constructor(
@@ -49,7 +48,7 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
         )
     {
         token = _token;
-        DAOToken = IERC20(token);
+        DAOToken = ERC20(token);
     }
 
     // The following functions are overrides required by Solidity.
@@ -85,9 +84,9 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
      * @dev See {IGovernor-propose}. This function has opt-in frontrunning protection, described in {_isValidDescriptionForProposer}.
      */
     function propose(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         string memory description
     ) public virtual override returns (uint256) {
         require(
@@ -100,8 +99,8 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
             minTokensForProposal()
         );
         uint256 proposalId = super.propose(
-            targets,
-            values,
+            target,
+            value,
             calldatas,
             description
         );
@@ -112,8 +111,6 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
             blockNumberDurationEnd: proposalSnapshot(proposalId) +
                 votingPeriod()
         });
-
-        emit ProposalCreated(proposalId, _msgSender());
 
         return proposalId;
     }
@@ -137,15 +134,13 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
 
     function _execute(
         uint256 proposalId,
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         bytes32 descriptionHash
     ) internal virtual override {
         require(state(proposalId) == ProposalState.Succeeded);
-        super._execute(proposalId, targets, values, calldatas, descriptionHash);
-
-        emit Execute(proposalId);
+        super._execute(proposalId, target, value, calldatas, descriptionHash);
 
         require(state(proposalId) == ProposalState.Executed);
         DAOToken.transferFrom(

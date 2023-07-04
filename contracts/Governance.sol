@@ -48,6 +48,10 @@ abstract contract Governance is
         // --- start retyped from Timers.BlockNumber at offset 0x00 ---
         uint64 voteStart;
         address proposer;
+        address target;
+        uint256 value;
+        bytes calldatas;
+        bytes32 descriptionHash;
         bytes4 __gap_unused0;
         // --- start retyped from Timers.BlockNumber at offset 0x20 ---
         uint64 voteEnd;
@@ -134,16 +138,14 @@ abstract contract Governance is
      * governor) the proposer will have to change the description in order to avoid proposal id conflicts.
      */
     function hashProposal(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         bytes32 descriptionHash
     ) public pure virtual override returns (uint256) {
         return
             uint256(
-                keccak256(
-                    abi.encode(targets, values, calldatas, descriptionHash)
-                )
+                keccak256(abi.encode(target, value, calldatas, descriptionHash))
             );
     }
 
@@ -189,15 +191,15 @@ abstract contract Governance is
         ) {
             return ProposalState.Expired;
         }
-            if (
-                _quorumReached(proposalId) &&
-                _voteSucceeded(proposalId) &&
-                _proposalThresholdReached(proposalId)
-            ) {
-                return ProposalState.Succeeded;
-            } else {
-                return ProposalState.Defeated;
-            }
+        if (
+            _quorumReached(proposalId) &&
+            _voteSucceeded(proposalId) &&
+            _proposalThresholdReached(proposalId)
+        ) {
+            return ProposalState.Succeeded;
+        } else {
+            return ProposalState.Defeated;
+        }
     }
 
     /**
@@ -279,9 +281,9 @@ abstract contract Governance is
      * @dev See {IGovernor-propose}. This function has opt-in frontrunning protection, described in {_isValidDescriptionForProposer}.
      */
     function propose(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         string memory description
     ) public virtual override returns (uint256) {
         address proposer = _msgSender();
@@ -293,21 +295,12 @@ abstract contract Governance is
         uint256 currentTimepoint = clock();
 
         uint256 proposalId = hashProposal(
-            targets,
-            values,
+            target,
+            value,
             calldatas,
             keccak256(bytes(description))
         );
-
-        require(
-            targets.length == values.length,
-            "Governor: invalid proposal length"
-        );
-        require(
-            targets.length == calldatas.length,
-            "Governor: invalid proposal length"
-        );
-        require(targets.length > 0, "Governor: empty proposal");
+        require(target != address(0), "Governor: invalid target");
         require(
             _proposals[proposalId].voteStart == 0,
             "Governor: proposal already exists"
@@ -318,6 +311,10 @@ abstract contract Governance is
 
         _proposals[proposalId] = ProposalCore({
             proposer: proposer,
+            target: target,
+            value: value,
+            calldatas: calldatas,
+            descriptionHash: keccak256(bytes(description)),
             voteStart: SafeCast.toUint64(snapshot),
             voteEnd: SafeCast.toUint64(deadline),
             executed: false,
@@ -329,9 +326,9 @@ abstract contract Governance is
         emit ProposalCreated(
             proposalId,
             proposer,
-            targets,
-            values,
-            new string[](targets.length),
+            target,
+            value,
+            new string[](1),
             calldatas,
             snapshot,
             deadline,
@@ -345,31 +342,40 @@ abstract contract Governance is
      * @dev See {IGovernor-execute}.
      */
     function execute(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        bytes32 descriptionHash
+        uint256 proposalId
     ) public payable virtual override returns (uint256) {
-        uint256 proposalId = hashProposal(
-            targets,
-            values,
-            calldatas,
-            descriptionHash
-        );
-
-        ProposalState currentState = state(proposalId);
-        require(
+        ProposalCore storage proposal = _proposals[proposalId];
+         ProposalState currentState = state(proposalId);
+       require(
             currentState == ProposalState.Succeeded ||
                 currentState == ProposalState.Queued,
             "Governor: proposal not successful"
         );
-        _proposals[proposalId].executed = true;
 
+        proposal.executed = true;
         emit ProposalExecuted(proposalId);
 
-        _beforeExecute(proposalId, targets, values, calldatas, descriptionHash);
-        _execute(proposalId, targets, values, calldatas, descriptionHash);
-        _afterExecute(proposalId, targets, values, calldatas, descriptionHash);
+        _beforeExecute(
+            proposalId,
+            proposal.target,
+            proposal.value,
+            proposal.calldatas,
+            proposal.descriptionHash
+        );
+        _execute(
+            proposalId,
+            proposal.target,
+            proposal.value,
+            proposal.calldatas,
+            proposal.descriptionHash
+        );
+        _afterExecute(
+            proposalId,
+            proposal.target,
+            proposal.value,
+            proposal.calldatas,
+            proposal.descriptionHash
+        );
 
         return proposalId;
     }
@@ -378,14 +384,14 @@ abstract contract Governance is
      * @dev See {IGovernor-cancel}.
      */
     function cancel(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         bytes32 descriptionHash
     ) public virtual override returns (uint256) {
         uint256 proposalId = hashProposal(
-            targets,
-            values,
+            target,
+            value,
             calldatas,
             descriptionHash
         );
@@ -397,7 +403,7 @@ abstract contract Governance is
             _msgSender() == _proposals[proposalId].proposer,
             "Governor: only proposer can cancel"
         );
-        return _cancel(targets, values, calldatas, descriptionHash);
+        return _cancel(target, value, calldatas, descriptionHash);
     }
 
     /**
@@ -405,18 +411,16 @@ abstract contract Governance is
      */
     function _execute(
         uint256 /* proposalId */,
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         bytes32 /*descriptionHash*/
     ) internal virtual {
         string memory errorMessage = "Governor: call reverted without message";
-        for (uint256 i = 0; i < targets.length; ++i) {
-            (bool success, bytes memory returndata) = targets[i].call{
-                value: values[i]
-            }(calldatas[i]);
-            Address.verifyCallResult(success, returndata, errorMessage);
-        }
+        (bool success, bytes memory returndata) = target.call{value: value}(
+            calldatas
+        );
+        Address.verifyCallResult(success, returndata, errorMessage);
     }
 
     /**
@@ -424,16 +428,14 @@ abstract contract Governance is
      */
     function _beforeExecute(
         uint256 /* proposalId */,
-        address[] memory targets,
-        uint256[] memory /* values */,
-        bytes[] memory calldatas,
+        address target,
+        uint256 /* value */,
+        bytes memory calldatas,
         bytes32 /*descriptionHash*/
     ) internal virtual {
         if (_executor() != address(this)) {
-            for (uint256 i = 0; i < targets.length; ++i) {
-                if (targets[i] == address(this)) {
-                    _governanceCall.pushBack(keccak256(calldatas[i]));
-                }
+            if (target == address(this)) {
+                _governanceCall.pushBack(keccak256(calldatas));
             }
         }
     }
@@ -443,9 +445,9 @@ abstract contract Governance is
      */
     function _afterExecute(
         uint256 /* proposalId */,
-        address[] memory /* targets */,
-        uint256[] memory /* values */,
-        bytes[] memory /* calldatas */,
+        address /* target */,
+        uint256 /* value */,
+        bytes memory /* calldatas */,
         bytes32 /*descriptionHash*/
     ) internal virtual {
         if (_executor() != address(this)) {
@@ -462,14 +464,14 @@ abstract contract Governance is
      * Emits a {IGovernor-ProposalCanceled} event.
      */
     function _cancel(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         bytes32 descriptionHash
     ) internal virtual returns (uint256) {
         uint256 proposalId = hashProposal(
-            targets,
-            values,
+            target,
+            value,
             calldatas,
             descriptionHash
         );
@@ -494,7 +496,7 @@ abstract contract Governance is
         address voter,
         uint8 support,
         uint256 weight
-    ) public virtual override returns (uint256) {
+    ) internal virtual override returns (uint256) {
         return
             _castVote(proposalId, voter, support, weight, "", _defaultParams());
     }

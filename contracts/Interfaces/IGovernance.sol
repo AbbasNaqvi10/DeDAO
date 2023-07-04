@@ -29,10 +29,10 @@ abstract contract IGovernance is IERC165, IERC6372 {
     event ProposalCreated(
         uint256 proposalId,
         address proposer,
-        address[] targets,
-        uint256[] values,
+        address target,
+        uint256 value,
         string[] signatures,
-        bytes[] calldatas,
+        bytes calldatas,
         uint256 voteStart,
         uint256 voteEnd,
         string description
@@ -125,9 +125,9 @@ abstract contract IGovernance is IERC165, IERC6372 {
      * @dev Hashing function used to (re)build the proposal id from the proposal details..
      */
     function hashProposal(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         bytes32 descriptionHash
     ) public pure virtual returns (uint256);
 
@@ -200,9 +200,9 @@ abstract contract IGovernance is IERC165, IERC6372 {
      * Emits a {ProposalCreated} event.
      */
     function propose(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         string memory description
     ) public virtual returns (uint256 proposalId);
 
@@ -214,12 +214,7 @@ abstract contract IGovernance is IERC165, IERC6372 {
      *
      * Note: some module can modify the requirements for execution, for example by adding an additional timelock.
      */
-    function execute(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
-        bytes32 descriptionHash
-    ) public payable virtual returns (uint256 proposalId);
+    function execute(uint256 proposalId) public payable virtual returns (uint256);
 
     /**
      * @dev Cancel a proposal. A proposal is cancellable by the proposer, but only while it is Pending state, i.e.
@@ -228,9 +223,9 @@ abstract contract IGovernance is IERC165, IERC6372 {
      * Emits a {ProposalCanceled} event.
      */
     function cancel(
-        address[] memory targets,
-        uint256[] memory values,
-        bytes[] memory calldatas,
+        address target,
+        uint256 value,
+        bytes memory calldatas,
         bytes32 descriptionHash
     ) public virtual returns (uint256 proposalId);
 
@@ -244,5 +239,5 @@ abstract contract IGovernance is IERC165, IERC6372 {
         address voter,
         uint8 support,
         uint256 weight
-    ) public virtual returns (uint256);
+    ) internal virtual returns (uint256);
 }
