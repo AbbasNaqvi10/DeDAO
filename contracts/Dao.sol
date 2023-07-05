@@ -2,29 +2,26 @@
 pragma solidity ^0.8.17;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "./GovernanceCountingSimple.sol";
 import "./GovernanceSetting.sol";
 import "./Governance.sol";
 
 contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple {
+    using SafeERC20 for IERC20;
+
+    event VoteCast(uint256 proposalId, uint96 weight, uint8 support);
+    event Withdraw(uint256 proposalId, address receiver, uint96 amount);
+
     IERC20 public token;
+
+    mapping(uint256 => ProposerStake) private _proposalStakeSnapshot;
+    mapping(uint256 => mapping(address => uint96)) private _votingSnapshot;
 
     struct ProposerStake {
         address creator;
-        uint256 amountStaked;
+        uint96 amountStaked;
     }
-
-    mapping(uint256 => ProposerStake) private _proposalStakeSnapshot;
-    mapping(uint256 => mapping(address => uint256)) private _votingSnapshot;
-
-    event VoteCast(
-        uint256 proposalId,
-        uint256 weight,
-        uint8 support,
-        address voter
-    );
-    event Withdraw(uint256 proposalId, address _to, uint256 amount);
 
     constructor(
         string memory _name,
@@ -44,36 +41,7 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
             _minParticipation
         )
     {
-        token = ERC20(_token);
-    }
-
-    // The following functions are overrides required by Solidity.
-
-    function votingDelay()
-        public
-        view
-        override(IGovernance, GovernanceSettings)
-        returns (uint256)
-    {
-        return super.votingDelay();
-    }
-
-    function votingPeriod()
-        public
-        view
-        override(IGovernance, GovernanceSettings)
-        returns (uint256)
-    {
-        return super.votingPeriod();
-    }
-
-    function proposalThreshold()
-        public
-        view
-        override(Governance, GovernanceSettings)
-        returns (uint256)
-    {
-        return super.proposalThreshold();
+        token = IERC20(_token);
     }
 
     /**
@@ -87,9 +55,9 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
     ) public virtual override returns (uint256) {
         require(
             token.balanceOf(_msgSender()) >= minTokensForProposal(),
-            "DAO: Not have enough tokens to create proposal"
+            "DAO: Not enough tokens to create proposal"
         );
-        token.transferFrom(
+        token.safeTransferFrom(
             _msgSender(),
             address(this),
             minTokensForProposal()
@@ -102,7 +70,7 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
         );
         _proposalStakeSnapshot[proposalId] = ProposerStake({
             creator: _msgSender(),
-            amountStaked: minTokensForProposal()
+            amountStaked: uint96(minTokensForProposal())
         });
 
         return proposalId;
@@ -111,18 +79,15 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
     function castVote(
         uint256 proposalId,
         uint8 support,
-        uint256 weight
+        uint96 weight
     ) public virtual returns (uint256) {
-        uint256 userBalance = token.balanceOf(_msgSender());
-        require(userBalance >= 0, "DAO: You do not have tokens to vote");
-        require(userBalance >= weight, "DAO: Not have enough power");
-        address voter = _msgSender();
-        _votingSnapshot[proposalId][_msgSender()] = weight;
-        token.transferFrom(_msgSender(), address(this), weight);
+        uint96 userBalance = uint96(token.balanceOf(_msgSender()));
+        require(userBalance >= weight, "DAO: Not enough voting power");
+        token.safeTransferFrom(_msgSender(), address(this), weight);
 
-        emit VoteCast(proposalId, weight, support, _msgSender());
+        emit VoteCast(proposalId, weight, support);
 
-        return castVoteWithWeight(proposalId, voter, support, weight);
+        return castVoteWithWeight(proposalId, _msgSender(), support, weight);
     }
 
     function _execute(
@@ -136,11 +101,9 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
         super._execute(proposalId, target, value, calldatas, descriptionHash);
 
         require(state(proposalId) == ProposalState.Executed, "DAO: Proposal is not executed");
-        token.transferFrom(
-            address(this),
-            _proposalStakeSnapshot[proposalId].creator,
-            _proposalStakeSnapshot[proposalId].amountStaked
-        );
+        ProposerStake memory proposer = _proposalStakeSnapshot[proposalId];
+        token.safeTransfer(proposer.creator, proposer.amountStaked);
+        delete _proposalStakeSnapshot[proposalId];
     }
 
     function proposerWithdraw(uint256 proposalId) external {
@@ -148,38 +111,45 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
             state(proposalId) == ProposalState.Expired || state(proposalId) == ProposalState.Canceled,
             "DAO: Proposal is still active"
         );
-        require(_proposalStakeSnapshot[proposalId].creator == _msgSender(), "DAO: Account is not proposal creator");
-        require(_proposalStakeSnapshot[proposalId].amountStaked > 0,"DAO: Not have any stake amount for this proposal");
-        uint256 amount = _proposalStakeSnapshot[proposalId].amountStaked;
-        token.transferFrom(address(this), _msgSender(), amount);
-        _proposalStakeSnapshot[proposalId].amountStaked = 0;
-        emit Withdraw(proposalId, _msgSender(), amount);
+        ProposerStake memory proposer = _proposalStakeSnapshot[proposalId];
+        require(proposer.creator == _msgSender(), "DAO: Not proposal creator");
+        require(proposer.amountStaked > 0, "DAO: No stake for this proposal");
+        token.safeTransfer(_msgSender(), proposer.amountStaked);
+        delete _proposalStakeSnapshot[proposalId];
+        emit Withdraw(proposalId, _msgSender(), proposer.amountStaked);
     }
 
     function withdraw(uint256 proposalId) external {
         require(
-            state(proposalId) == ProposalState.Executed || state(proposalId) == ProposalState.Expired || state(proposalId) == ProposalState.Canceled,
+            state(proposalId) == ProposalState.Executed ||
+            state(proposalId) == ProposalState.Expired ||
+            state(proposalId) == ProposalState.Canceled,
             "DAO: Proposal is still active"
         );
-        require(
-            _votingSnapshot[proposalId][_msgSender()] > 0,
-            "DAO: Account not have any stake amount in this proposal"
-        );
-        uint256 amount = _votingSnapshot[proposalId][_msgSender()];
-        token.transferFrom(address(this), _msgSender(), amount);
-        _votingSnapshot[proposalId][_msgSender()] = 0;
+        uint96 amount = _votingSnapshot[proposalId][_msgSender()];
+        require(amount > 0, "DAO: No stake for this proposal");
+        delete _votingSnapshot[proposalId][_msgSender()];
+        token.safeTransfer(_msgSender(), amount);
         emit Withdraw(proposalId, _msgSender(), amount);
     }
 
     function clock() public view override returns (uint48) {
-        return SafeCast.toUint48(block.timestamp);
+        return uint48(block.timestamp);
     }
 
-    function CLOCK_MODE() public view override returns (string memory) {}
+    function CLOCK_MODE() public pure override returns (string memory) {
+        return "";
+    }
 
-    function quorum(
-        uint256 timepoint
-    ) public view virtual override returns (uint256) {
+    function quorum(uint256 timepoint) public view virtual override returns (uint256) {
         return minParticipation();
     }
+
+    // Inline the functions from GovernanceSettings
+
+    function votingDelay() public view override(IGovernance, GovernanceSettings) returns (uint256) { return super.votingDelay(); }
+
+    function votingPeriod() public view override(IGovernance, GovernanceSettings) returns (uint256) { return super.votingPeriod(); }
+
+    function proposalThreshold() public view override(Governance, GovernanceSettings) returns (uint256){ return super.proposalThreshold(); }
 }
