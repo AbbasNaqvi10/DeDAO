@@ -96,7 +96,7 @@ abstract contract GovernanceCountingSimple is Governance {
     ) internal virtual override {
         ProposalVote storage proposalVote = _proposalVotes[proposalId];
 
-        require(!proposalVote.hasVoted[account], "GovernorVotingSimple: vote already cast");
+        require(!proposalVote.hasVoted[account], "GovernanceVotingSimple: vote already cast");
         proposalVote.hasVoted[account] = true;
 
         if (support == uint8(VoteType.Against)) {
@@ -106,7 +106,7 @@ abstract contract GovernanceCountingSimple is Governance {
         } else if (support == uint8(VoteType.Abstain)) {
             proposalVote.abstainVotes += weight;
         } else {
-            revert("GovernorVotingSimple: invalid value for enum VoteType");
+            revert("GovernanceVotingSimple: invalid value for enum VoteType");
         }
     }
 }

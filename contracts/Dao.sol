@@ -1,24 +1,21 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.17;
 
-import "./Governance.sol";
-import "./GovernanceCountingSimple.sol";
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "./GovernanceCountingSimple.sol";
 import "./GovernanceSetting.sol";
+import "./Governance.sol";
 
-contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
-    IERC20 public DAOToken;
-    address public token;
+contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple {
+    IERC20 public token;
 
     struct ProposerStake {
         address creator;
         uint256 amountStaked;
-        uint256 blockNumberDurationStart;
-        uint256 blockNumberDurationEnd;
     }
 
-    mapping(uint256 => ProposerStake) private _proposalSnapshot;
+    mapping(uint256 => ProposerStake) private _proposalStakeSnapshot;
     mapping(uint256 => mapping(address => uint256)) private _votingSnapshot;
 
     event VoteCast(
@@ -47,8 +44,7 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
             _minParticipation
         )
     {
-        token = _token;
-        DAOToken = ERC20(token);
+        token = ERC20(_token);
     }
 
     // The following functions are overrides required by Solidity.
@@ -90,10 +86,10 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
         string memory description
     ) public virtual override returns (uint256) {
         require(
-            DAOToken.balanceOf(_msgSender()) >= minTokensForProposal(),
-            "Not have enough tokens to create proposal"
+            token.balanceOf(_msgSender()) >= minTokensForProposal(),
+            "DAO: Not have enough tokens to create proposal"
         );
-        DAOToken.transferFrom(
+        token.transferFrom(
             _msgSender(),
             address(this),
             minTokensForProposal()
@@ -104,12 +100,9 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
             calldatas,
             description
         );
-        _proposalSnapshot[proposalId] = ProposerStake({
+        _proposalStakeSnapshot[proposalId] = ProposerStake({
             creator: _msgSender(),
-            amountStaked: minTokensForProposal(),
-            blockNumberDurationStart: proposalSnapshot(proposalId),
-            blockNumberDurationEnd: proposalSnapshot(proposalId) +
-                votingPeriod()
+            amountStaked: minTokensForProposal()
         });
 
         return proposalId;
@@ -120,12 +113,12 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
         uint8 support,
         uint256 weight
     ) public virtual returns (uint256) {
-        uint256 userBalance = DAOToken.balanceOf(_msgSender());
-        require(userBalance >= 0, "You do not have tokens to vote");
-        require(userBalance >= weight, "Not have enough power");
+        uint256 userBalance = token.balanceOf(_msgSender());
+        require(userBalance >= 0, "DAO: You do not have tokens to vote");
+        require(userBalance >= weight, "DAO: Not have enough power");
         address voter = _msgSender();
         _votingSnapshot[proposalId][_msgSender()] = weight;
-        DAOToken.transferFrom(_msgSender(), address(this), weight);
+        token.transferFrom(_msgSender(), address(this), weight);
 
         emit VoteCast(proposalId, weight, support, _msgSender());
 
@@ -139,41 +132,41 @@ contract Dao is Governance, GovernanceSettings, GovernanceCountingSimple {
         bytes memory calldatas,
         bytes32 descriptionHash
     ) internal virtual override {
-        require(state(proposalId) == ProposalState.Succeeded);
+        require(state(proposalId) == ProposalState.Succeeded, "DAO: Proposal is still active");
         super._execute(proposalId, target, value, calldatas, descriptionHash);
 
-        require(state(proposalId) == ProposalState.Executed);
-        DAOToken.transferFrom(
+        require(state(proposalId) == ProposalState.Executed, "DAO: Proposal is not executed");
+        token.transferFrom(
             address(this),
-            _proposalSnapshot[proposalId].creator,
-            _proposalSnapshot[proposalId].amountStaked
+            _proposalStakeSnapshot[proposalId].creator,
+            _proposalStakeSnapshot[proposalId].amountStaked
         );
     }
 
     function proposerWithdraw(uint256 proposalId) external {
         require(
             state(proposalId) == ProposalState.Expired || state(proposalId) == ProposalState.Canceled,
-            "Proposal isn't expired yet"
+            "DAO: Proposal is still active"
         );
-        require(_proposalSnapshot[proposalId].creator == _msgSender());
-        require(_proposalSnapshot[proposalId].amountStaked > 0,"Not have any stake amount for this proposal");
-        uint256 amount = _proposalSnapshot[proposalId].amountStaked;
-        DAOToken.transferFrom(address(this), _msgSender(), amount);
-        _proposalSnapshot[proposalId].amountStaked = 0;
+        require(_proposalStakeSnapshot[proposalId].creator == _msgSender(), "DAO: Account is not proposal creator");
+        require(_proposalStakeSnapshot[proposalId].amountStaked > 0,"DAO: Not have any stake amount for this proposal");
+        uint256 amount = _proposalStakeSnapshot[proposalId].amountStaked;
+        token.transferFrom(address(this), _msgSender(), amount);
+        _proposalStakeSnapshot[proposalId].amountStaked = 0;
         emit Withdraw(proposalId, _msgSender(), amount);
     }
 
     function withdraw(uint256 proposalId) external {
         require(
-            state(proposalId) == ProposalState.Executed,
-            "Proposal isn't executed yet"
+            state(proposalId) == ProposalState.Executed || state(proposalId) == ProposalState.Expired || state(proposalId) == ProposalState.Canceled,
+            "DAO: Proposal is still active"
         );
         require(
             _votingSnapshot[proposalId][_msgSender()] > 0,
-            "Account not have any stake amount in this proposal"
+            "DAO: Account not have any stake amount in this proposal"
         );
         uint256 amount = _votingSnapshot[proposalId][_msgSender()];
-        DAOToken.transferFrom(address(this), _msgSender(), amount);
+        token.transferFrom(address(this), _msgSender(), amount);
         _votingSnapshot[proposalId][_msgSender()] = 0;
         emit Withdraw(proposalId, _msgSender(), amount);
     }

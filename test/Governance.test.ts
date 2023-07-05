@@ -1,194 +1,195 @@
-import { ethers } from 'hardhat';
-import { expect, util } from 'chai';
-import { IERC20, Dao, IERC20__factory, Dao__factory, ERC20 } from '../typechain-types';
-import { utils, constants, BigNumberish, BigNumber, Contract} from "ethers";
+import { ethers } from "hardhat";
+import { expect, util } from "chai";
+import {
+  IERC20,
+  Dao,
+  IERC20__factory,
+  Dao__factory,
+  ERC20,
+} from "../typechain-types";
+import { utils, constants, BigNumberish, BigNumber, Contract } from "ethers";
 
 describe("Dao Testing", async () => {
-
   const [owner, proposer, voter] = await ethers.getSigners();
   let dao: Dao;
   let proposalId: BigNumberish;
 
-  const createDao = async (name: string, tokenAddress: string, votingDelay: BigNumberish, votingPeriod: BigNumberish, proposalThreshold: BigNumberish, minTokensForProposal: bigint, minParticipants: BigNumberish) => {
-    const DAO = await ethers.getContractFactory('Dao');
-    const Token  = await ethers.getContractFactory('ERC20');
-    const tokenContract  = Token.attach("0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889") as unknown as ERC20;
-    
-    dao = await DAO.deploy(name, utils.getAddress(tokenAddress), votingDelay, votingPeriod, proposalThreshold, (minTokensForProposal)*(await tokenContract.decimals()), minParticipants);
+  const createDao = async (
+    name: string,
+    tokenAddress: string,
+    votingDelay: BigNumberish,
+    votingPeriod: BigNumberish,
+    proposalThreshold: BigNumberish,
+    minTokensForProposal: bigint,
+    minParticipants: BigNumberish
+  ) => {
+    const DAO = await ethers.getContractFactory("Dao");
+    const Token = await ethers.getContractFactory("ERC20");
+    const tokenContract = Token.attach(
+      "0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889"
+    ) as unknown as ERC20;
+
+    dao = await DAO.deploy(
+      name,
+      utils.getAddress(tokenAddress),
+      votingDelay,
+      votingPeriod,
+      proposalThreshold,
+      minTokensForProposal * (await tokenContract.decimals()),
+      minParticipants
+    );
     await dao.deployed();
 
-    return {dao, owner, proposer, voter}
-  }
+    return { dao, owner, proposer, voter };
+  };
 
-  const createProposal = async (target: string, value: BigNumberish, calldatas: string, description: string) => {
-    proposalId = await dao.connect(proposer).propose(target, value, calldatas, description);
+  const createProposal = async (
+    target: string,
+    value: BigNumberish,
+    calldatas: string,
+    description: string
+  ) => {
+    proposalId = await dao
+      .connect(proposer)
+      .propose(target, value, calldatas, description);
     return proposalId;
-  }
+  };
 
-  const castVote = async (proposalId: BigNumberish, support: BigNumberish, weight: BigNumberish) => {
-    const vote = await dao.connect(voter).castVote(proposalId,support,weight);
+  const castVote = async (
+    proposalId: BigNumberish,
+    support: BigNumberish,
+    weight: BigNumberish
+  ) => {
+    const vote = await dao.connect(voter).castVote(proposalId, support, weight);
     return vote;
-  }
+  };
 
   const executeProposal = async (proposalId: BigNumberish) => {
     await dao.connect(proposer).execute(proposalId);
-  }
+  };
 
   const proposerWithdraw = async (proposalId: BigNumberish) => {
     await dao.connect(proposer).proposerWithdraw(proposalId);
-  }
+  };
 
   const voterWithdraw = async (proposalId: BigNumberish) => {
     await dao.connect(voter).withdraw(proposalId);
-  }
+  };
 
-})
+  before(async () => {
+    it("Should deploy Dao", async () => {
+      await createDao(
+        "testingDao",
+        "0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889",
+        0,
+        1,
+        2,
+        BigInt(5),
+        1
+      );
+    });
+  });
 
-// describe('Dao', () => {
+  describe("Proposal", () => {
+    let ABI = [
+      {
+        inputs: [
+          {
+            internalType: "address",
+            name: "_to",
+            type: "address",
+          },
+          {
+            internalType: "uint256",
+            name: "_value",
+            type: "uint256",
+          },
+        ],
+        name: "mint",
+        outputs: [],
+        stateMutability: "nonpayable",
+        type: "function",
+      },
+    ];
+    let iface = new ethers.utils.Interface(ABI);
 
-//   before(async () => {
-//     const DAO = await ethers.getContractFactory('Dao');
-//     dao = await DAO.deploy("TestingDAO", 0x9c3C9283D3e44854697Cd22D3Faa240Cfb032889, 0, 1, 1, 1, 1);
-//     await dao.deployed();
+    it("should allow a user to create a proposal", async () => {
+      await createProposal(
+        "0xD217BDE2332d7f902e913d5567f4b1e56AEa6bd9",
+        0,
+        iface.encodeFunctionData("mint", [
+          "0x283070d8D9ff69fCC9f84afE7013C1C32Fd5A19F",
+          ethers.utils.parseEther("100"),
+        ]),
+        "testing proposal"
+      );
+    });
 
-//     // Get accounts from Hardhat
-//     [owner, proposer, voter] = await ethers.getSigners();
-//   });
+    it("Should revert if the proposer does not have enough tokens", async () => {
+      // Attempt to propose without transferring tokens to the proposer
+      await expect(
+        await createProposal(
+          "0xD217BDE2332d7f902e913d5567f4b1e56AEa6bd9",
+          0,
+          iface.encodeFunctionData("mint", [
+            "0x283070d8D9ff69fCC9f84afE7013C1C32Fd5A19F",
+            ethers.utils.parseEther("100"),
+          ]),
+          "testing proposal"
+        )
+      ).to.be.revertedWith("Not have enough tokens to create proposal");
+    });
+  });
 
-//   describe('Propose', () => {
-//     it('Should create a new proposal', async () => {
+  describe("Vote", () => {
+    const voteSupport = 1; // 1 for support, 0 for opposition
+    const voteWeight = ethers.utils.parseEther("1");
+    it("should allow a user to vote on a proposal", async () => {
+      // Vote on the proposal
+      await castVote(proposalId, voteSupport, voteWeight);
+    });
 
-//       // Propose a new action
-//       const proposalId = await dao.connect(proposer).propose(
-//         /* targets */,
-//         /* values */,
-//         /* calldatas */,
-//         'Sample proposal'
-//       );
+    it("Should revert if the user does not have enough tokens", async () => {
+      await expect(
+        await castVote(proposalId, voteSupport, voteWeight)
+      ).to.be.revertedWith("You do not have tokens to vote");
+    });
 
-//       // Assert the proposer and other properties of the proposal snapshot
+    it("Should revert if the user does not have enough power", async () => {
+      // Attempt to cast a vote with weight greater than the user's balance
+      await expect(
+        await castVote(proposalId, voteSupport, ethers.utils.parseEther("10"))
+      ).to.be.revertedWith("Not have enough power");
+    });
+  });
 
-//     });
+  describe("Execute", () => {
+    it("should execute a proposal and transfer tokens", async () => {
+      await executeProposal(proposalId);
+    });
 
-//     it('Should revert if the proposer does not have enough tokens', async () => {
-//       // Attempt to propose without transferring tokens to the proposer
-//       await expect(
-//         dao.connect(proposer).propose(
-//           /* targets */,
-//           /* values */,
-//           /* calldatas */,
-//           'Sample proposal'
-//         )
-//       ).to.be.revertedWith('Not have enough tokens to create proposal');
-//     });
-//   });
+    it("Should revert if the minimum participation threshold is not reached", async () => {
+      // Attempt to execute the proposal without reaching the minimum participation
+      await expect(await executeProposal(proposalId)).to.be.revertedWith(
+        "Min participation not reached"
+      );
+    });
 
-//   describe('CastVote', () => {
-//     it('Should allow a user to cast a vote', async () => {
+    it("Should revert if the proposal does not succeed", async () => {
+      // Attempt to execute the proposal without reaching the minimum participation
+      await expect(await executeProposal(proposalId)).to.be.revertedWith(
+        "Proposal not succeeded"
+      );
+    });
+  });
 
-//       // Cast a vote on the proposal
-//       await dao.connect(voter).castVote(proposalId, /* support */, /* weight */);
+  describe("Withdraw", () => {
+    it("should allow a proposer to withdraw their stake if the proposal is expired or canceled", async () => {
+      await proposerWithdraw(proposalId);
+    });
 
-
-//     });
-
-//     it('Should revert if the user does not have enough tokens', async () => {
-//       // Attempt to cast a vote without transferring tokens to the voter
-//       const proposalId = /* existing proposal ID */;
-//       await expect(
-//         dao.connect(voter).castVote(proposalId, /* support */, /* weight */)
-//       ).to.be.revertedWith('You do not have tokens to vote');
-//     });
-
-//     it('Should revert if the user does not have enough power', async () => {
-//       // Transfer fewer tokens than the required weight to the voter
-//       await token.transfer(voter.address, /* amount less than required weight */);
-
-//       // Propose a new action
-//       const proposalId = await dao.connect(proposer).propose(
-//         /* targets */,
-//         /* values */,
-//         /* calldatas */,
-//         'Sample proposal'
-//       );
-
-//       // Attempt to cast a vote with weight greater than the user's balance
-//       await expect(
-//         dao.connect(voter).castVote(proposalId, /* support */, /* weight */)
-//       ).to.be.revertedWith('Not have enough power');
-//     });
-//   });
-
-//   describe('Execution', () => {
-//     it('Should execute a proposal', async () => {
-//       // Transfer enough tokens to the proposer
-//       await token.transfer(proposer.address, /* amount greater than minTokensForProposal */);
-
-//       // Propose a new action
-//       const proposalId = await dao.connect(proposer).propose(
-//         /* targets */,
-//         /* values */,
-//         /* calldatas */,
-//         'Sample proposal'
-//       );
-
-//       // Cast a vote on the proposal
-//       await dao.connect(voter).castVote(proposalId, /* support */, /* weight */);
-
-//       // Fast-forward to the end of the voting period
-//       await ethers.provider.send('evm_increaseTime', [/* votingPeriod */]);
-//       await ethers.provider.send('evm_mine');
-
-//       // Execute the proposal
-//       await dao.execute(proposalId);
-
-//       // Retrieve the proposal state
-//       const proposalState = await dao.state(proposalId);
-
-//       // Assert the proposal state
-//       expect(proposalState).to.equal(/* expected proposal state */);
-//     });
-
-//     it('Should revert if the minimum participation threshold is not reached', async () => {
-//       // Transfer enough tokens to the proposer
-//       await token.transfer(proposer.address, /* amount greater than minTokensForProposal */);
-
-//       // Propose a new action
-//       const proposalId = await dao.connect(proposer).propose(
-//         /* targets */,
-//         /* values */,
-//         /* calldatas */,
-//         'Sample proposal'
-//       );
-
-//       // Fast-forward to the end of the voting period
-//       await ethers.provider.send('evm_increaseTime', [/* votingPeriod */]);
-//       await ethers.provider.send('evm_mine');
-
-//       // Attempt to execute the proposal without reaching the minimum participation
-//       await expect(dao.execute(proposalId)).to.be.revertedWith('Min participation not reached');
-//     });
-
-//     it('Should revert if the proposal does not succeed', async () => {
-//       // Transfer enough tokens to the proposer
-//       await token.transfer(proposer.address, /* amount greater than minTokensForProposal */);
-
-//       // Propose a new action
-//       const proposalId = await dao.connect(proposer).propose(
-//         /* targets */,
-//         /* values */,
-//         /* calldatas */,
-//         'Sample proposal'
-//       );
-
-//       // Fast-forward to the end of the voting period
-//       await ethers.provider.send('evm_increaseTime', [/* votingPeriod */]);
-//       await ethers.provider.send('evm_mine');
-
-//       // Attempt to execute the proposal without reaching the minimum participation
-//       await expect(dao.execute(proposalId)).to.be.revertedWith('Proposal not succeeded');
-//     });
-//   });
-
-//   // Additional test cases can be added as needed
-// });
+    it("should allow a voter to withdraw their tokens after a proposal is executed", async () => {
+      await voterWithdraw(proposalId);
+    });
+  });
+});

@@ -84,7 +84,7 @@ abstract contract Governance is
      * governance protocol (since v4.6).
      */
     modifier onlyGovernance() {
-        require(_msgSender() == _executor(), "Governor: onlyGovernance");
+        require(_msgSender() == _executor(), "Governance: onlyGovernance");
         if (_executor() != address(this)) {
             bytes32 msgDataHash = keccak256(_msgData());
             // loop until popping the expected operation - throw if deque is empty (operation not authorized)
@@ -106,7 +106,7 @@ abstract contract Governance is
     receive() external payable virtual {
         require(
             _executor() == address(this),
-            "Governor: must send to executor"
+            "Governance: must send to executor"
         );
     }
 
@@ -289,7 +289,7 @@ abstract contract Governance is
         address proposer = _msgSender();
         require(
             _isValidDescriptionForProposer(proposer, description),
-            "Governor: proposer restricted"
+            "Governance: proposer restricted"
         );
 
         uint256 currentTimepoint = clock();
@@ -300,10 +300,10 @@ abstract contract Governance is
             calldatas,
             keccak256(bytes(description))
         );
-        require(target != address(0), "Governor: invalid target");
+        require(target != address(0), "Governance: invalid target");
         require(
             _proposals[proposalId].voteStart == 0,
-            "Governor: proposal already exists"
+            "Governance: proposal already exists"
         );
 
         uint256 snapshot = currentTimepoint + votingDelay();
@@ -349,7 +349,7 @@ abstract contract Governance is
        require(
             currentState == ProposalState.Succeeded ||
                 currentState == ProposalState.Queued,
-            "Governor: proposal not successful"
+            "Governance: proposal not successful"
         );
 
         proposal.executed = true;
@@ -397,11 +397,11 @@ abstract contract Governance is
         );
         require(
             state(proposalId) == ProposalState.Pending,
-            "Governor: too late to cancel"
+            "Governance: too late to cancel"
         );
         require(
             _msgSender() == _proposals[proposalId].proposer,
-            "Governor: only proposer can cancel"
+            "Governance: only proposer can cancel"
         );
         return _cancel(target, value, calldatas, descriptionHash);
     }
@@ -482,7 +482,7 @@ abstract contract Governance is
             currentState != ProposalState.Canceled &&
                 currentState != ProposalState.Expired &&
                 currentState != ProposalState.Executed,
-            "Governor: proposal not active"
+            "Governance: proposal not active"
         );
         _proposals[proposalId].canceled = true;
 
@@ -517,7 +517,7 @@ abstract contract Governance is
     ) internal virtual returns (uint256) {
         require(
             state(proposalId) == ProposalState.Active,
-            "Governor: vote not currently active"
+            "Governance: vote not currently active"
         );
 
         _countVote(proposalId, account, support, weight, params);
