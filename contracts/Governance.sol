@@ -15,6 +15,7 @@ import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "./Interfaces/IGovernance.sol";
 
+
 /**
  * @dev Core of the governance system, designed to be extended though various modules.
  *
@@ -349,7 +350,7 @@ abstract contract Governance is
        require(
             currentState == ProposalState.Succeeded ||
                 currentState == ProposalState.Queued,
-            "Governance: proposal not successful"
+            "Governance: proposal not succeeded"
         );
 
         proposal.executed = true;

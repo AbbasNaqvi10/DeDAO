@@ -10,7 +10,6 @@ import "./Governance.sol";
 contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple {
     using SafeERC20 for IERC20;
 
-    event VoteCast(uint256 proposalId, uint96 weight, uint8 support);
     event Withdraw(uint256 proposalId, address receiver, uint96 amount);
 
     IERC20 public token;
@@ -85,8 +84,6 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
         require(userBalance >= weight, "DAO: Not enough voting power");
         token.safeTransferFrom(_msgSender(), address(this), weight);
 
-        emit VoteCast(proposalId, weight, support);
-
         return castVoteWithWeight(proposalId, _msgSender(), support, weight);
     }
 
@@ -97,7 +94,6 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
         bytes memory calldatas,
         bytes32 descriptionHash
     ) internal virtual override {
-        require(state(proposalId) == ProposalState.Succeeded, "DAO: Proposal is still active");
         super._execute(proposalId, target, value, calldatas, descriptionHash);
 
         require(state(proposalId) == ProposalState.Executed, "DAO: Proposal is not executed");
