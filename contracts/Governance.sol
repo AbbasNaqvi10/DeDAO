@@ -14,7 +14,7 @@ import "@openzeppelin/contracts/utils/structs/DoubleEndedQueue.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/Context.sol";
 import "./Interfaces/IGovernance.sol";
-
+import "hardhat/console.sol";
 
 /**
  * @dev Core of the governance system, designed to be extended though various modules.
@@ -157,39 +157,37 @@ abstract contract Governance is
         uint256 proposalId
     ) public view virtual override returns (ProposalState) {
         ProposalCore storage proposal = _proposals[proposalId];
-
-        if (proposal.executed) {
-            return ProposalState.Executed;
-        }
-
-        if (proposal.canceled) {
-            return ProposalState.Canceled;
-        }
-
         uint256 snapshot = proposalSnapshot(proposalId);
+        uint256 currentTimepoint = clock();
+        uint256 deadline = proposalDeadline(proposalId);
+        console.log("start time in state: ", snapshot);
+        console.log("deadline in state: ", deadline);
+        console.log("current time in state: ", currentTimepoint);
 
         if (snapshot == 0) {
             revert("Governor: unknown proposal id");
         }
-
-        uint256 currentTimepoint = clock();
+        if (proposal.executed) {
+            return ProposalState.Executed;
+        } else if (proposal.canceled) {
+            return ProposalState.Canceled;
+        }
 
         if (snapshot >= currentTimepoint) {
             return ProposalState.Pending;
         }
 
-        uint256 deadline = proposalDeadline(proposalId);
-
-        if (deadline >= currentTimepoint) {
-            return ProposalState.Active;
-        }
-
         if (
-            deadline <= currentTimepoint &&
-            (!_quorumReached(proposalId) ||
+            ((deadline >= currentTimepoint && (!_quorumReached(proposalId))) ||
                 !_voteSucceeded(proposalId) ||
                 !_proposalThresholdReached(proposalId))
         ) {
+            return ProposalState.Active;
+        }
+
+        if (deadline <= currentTimepoint) {
+            console.log("deadline in state: ", deadline);
+            console.log("current time in state: ", currentTimepoint);
             return ProposalState.Expired;
         }
         if (
@@ -346,8 +344,19 @@ abstract contract Governance is
         uint256 proposalId
     ) public payable virtual override returns (uint256) {
         ProposalCore storage proposal = _proposals[proposalId];
-         ProposalState currentState = state(proposalId);
-       require(
+        ProposalState currentState = state(proposalId);
+
+        console.log("is qourum reached: ", _quorumReached(proposalId));
+        console.log("proposal threshold: ", proposalThreshold());
+        console.log(
+            "is proposal threshold meet: ",
+            _proposalThresholdReached(proposalId)
+        );
+        console.log("is vote success: ", _voteSucceeded(proposalId));
+
+        console.log("Proposal State:", uint8(currentState));
+
+        require(
             currentState == ProposalState.Succeeded ||
                 currentState == ProposalState.Queued,
             "Governance: proposal not succeeded"
@@ -516,6 +525,8 @@ abstract contract Governance is
         string memory reason,
         bytes memory params
     ) internal virtual returns (uint256) {
+        ProposalState statee = state(proposalId);
+        console.log("Proposal State:", uint8(statee));
         require(
             state(proposalId) == ProposalState.Active,
             "Governance: vote not currently active"

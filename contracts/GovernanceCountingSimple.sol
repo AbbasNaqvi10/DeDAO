@@ -4,6 +4,7 @@
 pragma solidity ^0.8.17;
 
 import "./Governance.sol";
+import "hardhat/console.sol";
 
 /**
  * @dev Extension of {Governor} for simple, 3 options, vote counting.
@@ -21,6 +22,7 @@ abstract contract GovernanceCountingSimple is Governance {
     }
 
     struct ProposalVote {
+        uint256 votersCount;
         uint256 againstVotes;
         uint256 forVotes;
         uint256 abstainVotes;
@@ -56,13 +58,14 @@ abstract contract GovernanceCountingSimple is Governance {
 
     function proposalThresholdReached(uint256 proposalId) public view virtual returns (uint256) {
         (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes) = proposalVotes(proposalId);
-        uint256 threshold = (forVotes/(againstVotes+forVotes+abstainVotes))*100;
+        uint256 threshold = (forVotes*100) / (againstVotes+forVotes+abstainVotes);
         return threshold;
     }
 
     function _proposalThresholdReached(uint256 proposalId) internal view virtual override returns (bool) {
         (uint256 againstVotes, uint256 forVotes, uint256 abstainVotes) = proposalVotes(proposalId);
-        uint256 threshold = (forVotes/(againstVotes+forVotes+abstainVotes))*100;
+        if(againstVotes+forVotes+abstainVotes == 0) return false;
+        uint256 threshold = (forVotes*100) / (againstVotes+forVotes+abstainVotes);
         return threshold >= super.proposalThreshold();
     }
 
@@ -72,7 +75,7 @@ abstract contract GovernanceCountingSimple is Governance {
     function _quorumReached(uint256 proposalId) internal view virtual override returns (bool) {
         ProposalVote storage proposalVote = _proposalVotes[proposalId];
 
-        return quorum(proposalSnapshot(proposalId)) <= proposalVote.forVotes + proposalVote.abstainVotes;
+        return quorum(proposalSnapshot(proposalId)) <= proposalVote.votersCount;
     }
 
     /**
@@ -108,5 +111,6 @@ abstract contract GovernanceCountingSimple is Governance {
         } else {
             revert("GovernanceVotingSimple: invalid value for enum VoteType");
         }
+        proposalVote.votersCount += 1;
     }
 }

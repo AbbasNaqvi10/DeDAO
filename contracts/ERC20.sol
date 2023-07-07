@@ -80,7 +80,7 @@ contract MyToken is Context, IERC20 {
         return true;
     }
 
-    function mint(address account, uint256 amount) public onlyOwner {
+    function mint(address account, uint256 amount) public {
         require(account != address(0), "ERC20: mint to the zero address");
         _totalSupply += amount;
         _balances[account] += amount;

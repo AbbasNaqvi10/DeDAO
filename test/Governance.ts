@@ -143,7 +143,7 @@ describe("Dao Testing", function () {
     user: ContractRunner,
     proposalId: BigNumberish
   ) => {
-    await token.connect(user).approve(await dao.getAddress(), MaxUint256);
+    // await token.connect(user).approve(await dao.getAddress(), MaxUint256);
     await dao.connect(user).execute(proposalId);
   };
 
@@ -165,18 +165,29 @@ describe("Dao Testing", function () {
     await dao.connect(voter).withdraw(proposalId);
   };
 
-  // before(async () => {
-  //   try {
-  //     // Create DAO with desired parameters
-  //     await createDao("testingDao", 0, 7200 * 2, 350, BigInt(500), 1);
-  //   } catch (error) {
-  //     console.log("error:-----", error);
-  //   }
-  // });
-
   async function createDaoFixture() {
     // Create DAO with desired parameters
-    return await createDao("testingDao", 0, 7200 * 2, 350, BigInt(500), 1);
+    return await createDao("testingDao", 0, 7200 * 2 * 12, 50, BigInt(500), 1);
+  }
+  async function createProposalFixture() {
+    const { dao, token, deployer, proposer1, proposer2, voter1, voter2 } =
+      await createDao("testingDao", 0, 7200 * 2 * 12, 30, BigInt(500), 5);
+
+    // Create a proposal
+    const id = await createProposal(
+      dao,
+      token,
+      deployer,
+      await token.getAddress(), // target
+      0,
+      iface.encodeFunctionData("mint", [
+        "0x283070d8D9ff69fCC9f84afE7013C1C32Fd5A19F",
+        parseEther("100"),
+      ]),
+      "testing proposal"
+    );
+
+    return { id, dao, token, deployer, proposer1, proposer2, voter1, voter2 };
   }
 
   describe("Proposal", () => {
@@ -261,27 +272,6 @@ describe("Dao Testing", function () {
     const voteSupport = 1; // 1 for support, 0 for opposition
     const voteWeight = BigInt(50);
 
-    async function createProposalFixture() {
-      const { dao, token, deployer, proposer1, proposer2, voter1, voter2 } =
-        await createDao("testingDao", 0, 7200 * 2, 350, BigInt(500), 1);
-
-      // Create a proposal
-      const id = await createProposal(
-        dao,
-        token,
-        deployer,
-        await token.getAddress(), // target
-        0,
-        iface.encodeFunctionData("mint", [
-          "0x283070d8D9ff69fCC9f84afE7013C1C32Fd5A19F",
-          parseEther("100"),
-        ]),
-        "testing proposal"
-      );
-
-      return { id, dao, token, deployer, proposer1, proposer2, voter1, voter2 };
-    }
-
     it("should allow a user to vote on a proposal", async () => {
       const { id, dao, token, deployer, proposer1, proposer2, voter1, voter2 } =
         await loadFixture(createProposalFixture);
@@ -326,7 +316,7 @@ describe("Dao Testing", function () {
   describe("Execute", () => {
     async function createProposalAndCastVoteFixture() {
       const { dao, token, deployer, proposer1, proposer2, voter1, voter2 } =
-        await createDao("testingDao", 0, 7200 * 2 *12, 350, BigInt(500), 1);
+        await createDao("testingDao", 0, 7200 * 2 *12, 50, BigInt(500), 1);
 
       // Create a proposal
       const id = await createProposal(
@@ -377,30 +367,24 @@ describe("Dao Testing", function () {
         voter1,
         voter2,
       } = await loadFixture(createProposalAndCastVoteFixture);
-      await castVote(
-        dao,
-        token,
-        voter2,
-        id,
-        1,
-        BigInt(50) * BigInt(await token.decimals())
-      );
 
       const currentTime = await time.latest();
       const endTime = await dao.votingPeriod();
       console.log("current time: ", currentTime);
       console.log("end time: ", endTime);
-      // await time.increase(endTime + BigInt(currentTime));
+      await time.increase(1);
       console.log("state: ", await dao.state(id));
+      console.log("threshold: ", await dao.proposalThresholdReached(id));
 
       // Execute the proposal
+      console.log("how much proposal threshold meet: ", await dao.proposalThresholdReached(id));
+
 
       await executeProposal(dao, token, deployer, id);
     });
 
-    it("Should revert if the minimum participation threshold is not reached", async () => {
+    it("Should revert if the minimum participation is not reached", async () => {
       const {
-        vote,
         id,
         dao,
         token,
@@ -409,17 +393,25 @@ describe("Dao Testing", function () {
         proposer2,
         voter1,
         voter2,
-      } = await loadFixture(createProposalAndCastVoteFixture);
+      } = await loadFixture(createProposalFixture);
+
+      const vote = await castVote(
+        dao,
+        token,
+        voter1,
+        id,
+        1,
+        BigInt(50)*BigInt(await token.decimals())
+      );
 
       // Attempt to execute the proposal without reaching the minimum participation
       await expect(
         executeProposal(dao, token, deployer, id)
-      ).to.be.revertedWith("Governance: proposal not successed");
+      ).to.be.revertedWith("Governance: proposal not succeeded");
     });
 
     it("Should revert if the proposal does not succeed", async () => {
       const {
-        vote,
         id,
         dao,
         token,
@@ -428,13 +420,14 @@ describe("Dao Testing", function () {
         proposer2,
         voter1,
         voter2,
-      } = await loadFixture(createProposalAndCastVoteFixture);
+      } = await loadFixture(createProposalFixture);
 
       // Attempt to execute the proposal without reaching the minimum participation
       await expect(
         executeProposal(dao, token, deployer, id)
-      ).to.be.revertedWith("Governance: proposal not successed");
+      ).to.be.revertedWith("Governance: proposal not succeeded");
     });
+  
   });
 
   // describe("Withdraw", () => {
