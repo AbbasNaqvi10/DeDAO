@@ -178,7 +178,7 @@ abstract contract Governance is
         }
 
         if (
-            ((deadline >= currentTimepoint && (!_quorumReached(proposalId))) ||
+            deadline >= currentTimepoint && ((!_quorumReached(proposalId)) ||
                 !_voteSucceeded(proposalId) ||
                 !_proposalThresholdReached(proposalId))
         ) {
