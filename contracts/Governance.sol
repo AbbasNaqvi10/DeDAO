@@ -27,22 +27,12 @@ import "hardhat/console.sol";
  *
  * _Available since v4.3._
  */
-abstract contract Governance is
-    Context,
-    ERC165,
-    EIP712,
-    IGovernance,
-    IERC721Receiver,
-    IERC1155Receiver
-{
+abstract contract Governance is Context, ERC165, EIP712, IGovernance, IERC721Receiver, IERC1155Receiver {
     using DoubleEndedQueue for DoubleEndedQueue.Bytes32Deque;
 
-    bytes32 public constant BALLOT_TYPEHASH =
-        keccak256("Ballot(uint256 proposalId,uint8 support)");
+    bytes32 public constant BALLOT_TYPEHASH = keccak256("Ballot(uint256 proposalId,uint8 support)");
     bytes32 public constant EXTENDED_BALLOT_TYPEHASH =
-        keccak256(
-            "ExtendedBallot(uint256 proposalId,uint8 support,string reason,bytes params)"
-        );
+        keccak256("ExtendedBallot(uint256 proposalId,uint8 support,string reason,bytes params)");
 
     // solhint-disable var-name-mixedcase
     struct ProposalCore {
@@ -105,10 +95,7 @@ abstract contract Governance is
      * @dev Function to receive ETH that will be handled by the governor (disabled if executor is a third party contract)
      */
     receive() external payable virtual {
-        require(
-            _executor() == address(this),
-            "Governance: must send to executor"
-        );
+        require(_executor() == address(this), "Governance: must send to executor");
     }
 
     /**
@@ -144,29 +131,22 @@ abstract contract Governance is
         bytes memory calldatas,
         bytes32 descriptionHash
     ) public pure virtual override returns (uint256) {
-        return
-            uint256(
-                keccak256(abi.encode(target, value, calldatas, descriptionHash))
-            );
+        return uint256(keccak256(abi.encode(target, value, calldatas, descriptionHash)));
     }
 
     /**
      * @dev See {IGovernor-state}.
      */
-    function state(
-        uint256 proposalId
-    ) public view virtual override returns (ProposalState) {
+    function state(uint256 proposalId) public view virtual override returns (ProposalState) {
         ProposalCore storage proposal = _proposals[proposalId];
         uint256 snapshot = proposalSnapshot(proposalId);
         uint256 currentTimepoint = clock();
         uint256 deadline = proposalDeadline(proposalId);
-        console.log("start time in state: ", snapshot);
-        console.log("deadline in state: ", deadline);
-        console.log("current time in state: ", currentTimepoint);
 
         if (snapshot == 0) {
             revert("Governor: unknown proposal id");
         }
+
         if (proposal.executed) {
             return ProposalState.Executed;
         } else if (proposal.canceled) {
@@ -177,27 +157,14 @@ abstract contract Governance is
             return ProposalState.Pending;
         }
 
-        if (
-            deadline >= currentTimepoint && ((!_quorumReached(proposalId)) ||
-                !_voteSucceeded(proposalId) ||
-                !_proposalThresholdReached(proposalId))
-        ) {
+        if (deadline >= currentTimepoint) {
             return ProposalState.Active;
-        }
-
-        if (deadline <= currentTimepoint) {
-            console.log("deadline in state: ", deadline);
-            console.log("current time in state: ", currentTimepoint);
-            return ProposalState.Expired;
-        }
-        if (
-            _quorumReached(proposalId) &&
-            _voteSucceeded(proposalId) &&
-            _proposalThresholdReached(proposalId)
-        ) {
-            return ProposalState.Succeeded;
         } else {
-            return ProposalState.Defeated;
+            if (!_quorumReached(proposalId) || !_voteSucceeded(proposalId) || !_proposalThresholdReached(proposalId)) {
+                return ProposalState.Expired;
+            } else {
+                return ProposalState.Succeeded;
+            }
         }
     }
 
@@ -211,47 +178,35 @@ abstract contract Governance is
     /**
      * @dev See {IGovernor-proposalSnapshot}.
      */
-    function proposalSnapshot(
-        uint256 proposalId
-    ) public view virtual override returns (uint256) {
+    function proposalSnapshot(uint256 proposalId) public view virtual override returns (uint256) {
         return _proposals[proposalId].voteStart;
     }
 
     /**
      * @dev See {IGovernor-proposalDeadline}.
      */
-    function proposalDeadline(
-        uint256 proposalId
-    ) public view virtual override returns (uint256) {
+    function proposalDeadline(uint256 proposalId) public view virtual override returns (uint256) {
         return _proposals[proposalId].voteEnd;
     }
 
     /**
      * @dev Returns the account that created a given proposal.
      */
-    function proposalProposer(
-        uint256 proposalId
-    ) public view virtual override returns (address) {
+    function proposalProposer(uint256 proposalId) public view virtual override returns (address) {
         return _proposals[proposalId].proposer;
     }
 
     /**
      * @dev Amount of votes already cast passes the threshold limit.
      */
-    function _quorumReached(
-        uint256 proposalId
-    ) internal view virtual returns (bool);
+    function _quorumReached(uint256 proposalId) internal view virtual returns (bool);
 
-    function _proposalThresholdReached(
-        uint256 proposalId
-    ) internal view virtual returns (bool);
+    function _proposalThresholdReached(uint256 proposalId) internal view virtual returns (bool);
 
     /**
      * @dev Is the proposal successful or not.
      */
-    function _voteSucceeded(
-        uint256 proposalId
-    ) internal view virtual returns (bool);
+    function _voteSucceeded(uint256 proposalId) internal view virtual returns (bool);
 
     /**
      * @dev Register a vote for `proposalId` by `account` with a given `support`, voting `weight` and voting `params`.
@@ -280,32 +235,20 @@ abstract contract Governance is
      * @dev See {IGovernor-propose}. This function has opt-in frontrunning protection, described in {_isValidDescriptionForProposer}.
      */
     function propose(
+        uint256 startTime,
         address target,
         uint256 value,
         bytes memory calldatas,
         string memory description
     ) public virtual override returns (uint256) {
         address proposer = _msgSender();
-        require(
-            _isValidDescriptionForProposer(proposer, description),
-            "Governance: proposer restricted"
-        );
+        require(_isValidDescriptionForProposer(proposer, description), "Governance: proposer restricted");
 
-        uint256 currentTimepoint = clock();
-
-        uint256 proposalId = hashProposal(
-            target,
-            value,
-            calldatas,
-            keccak256(bytes(description))
-        );
+        uint256 proposalId = hashProposal(target, value, calldatas, keccak256(bytes(description)));
         require(target != address(0), "Governance: invalid target");
-        require(
-            _proposals[proposalId].voteStart == 0,
-            "Governance: proposal already exists"
-        );
+        require(_proposals[proposalId].voteStart == 0, "Governance: proposal already exists");
 
-        uint256 snapshot = currentTimepoint + votingDelay();
+        uint256 snapshot = startTime;
         uint256 deadline = snapshot + votingPeriod();
 
         _proposals[proposalId] = ProposalCore({
@@ -340,52 +283,21 @@ abstract contract Governance is
     /**
      * @dev See {IGovernor-execute}.
      */
-    function execute(
-        uint256 proposalId
-    ) public payable virtual override returns (uint256) {
+    function execute(uint256 proposalId) public payable virtual override returns (uint256) {
         ProposalCore storage proposal = _proposals[proposalId];
         ProposalState currentState = state(proposalId);
 
-        console.log("is qourum reached: ", _quorumReached(proposalId));
-        console.log("proposal threshold: ", proposalThreshold());
-        console.log(
-            "is proposal threshold meet: ",
-            _proposalThresholdReached(proposalId)
-        );
-        console.log("is vote success: ", _voteSucceeded(proposalId));
-
-        console.log("Proposal State:", uint8(currentState));
-
         require(
-            currentState == ProposalState.Succeeded ||
-                currentState == ProposalState.Queued,
+            currentState == ProposalState.Succeeded || currentState == ProposalState.Queued,
             "Governance: proposal not succeeded"
         );
 
         proposal.executed = true;
         emit ProposalExecuted(proposalId);
 
-        _beforeExecute(
-            proposalId,
-            proposal.target,
-            proposal.value,
-            proposal.calldatas,
-            proposal.descriptionHash
-        );
-        _execute(
-            proposalId,
-            proposal.target,
-            proposal.value,
-            proposal.calldatas,
-            proposal.descriptionHash
-        );
-        _afterExecute(
-            proposalId,
-            proposal.target,
-            proposal.value,
-            proposal.calldatas,
-            proposal.descriptionHash
-        );
+        _beforeExecute(proposalId, proposal.target, proposal.value, proposal.calldatas, proposal.descriptionHash);
+        _execute(proposalId, proposal.target, proposal.value, proposal.calldatas, proposal.descriptionHash);
+        _afterExecute(proposalId, proposal.target, proposal.value, proposal.calldatas, proposal.descriptionHash);
 
         return proposalId;
     }
@@ -399,20 +311,9 @@ abstract contract Governance is
         bytes memory calldatas,
         bytes32 descriptionHash
     ) public virtual override returns (uint256) {
-        uint256 proposalId = hashProposal(
-            target,
-            value,
-            calldatas,
-            descriptionHash
-        );
-        require(
-            state(proposalId) == ProposalState.Pending,
-            "Governance: too late to cancel"
-        );
-        require(
-            _msgSender() == _proposals[proposalId].proposer,
-            "Governance: only proposer can cancel"
-        );
+        uint256 proposalId = hashProposal(target, value, calldatas, descriptionHash);
+        require(state(proposalId) == ProposalState.Pending, "Governance: too late to cancel");
+        require(_msgSender() == _proposals[proposalId].proposer, "Governance: only proposer can cancel");
         return _cancel(target, value, calldatas, descriptionHash);
     }
 
@@ -427,9 +328,7 @@ abstract contract Governance is
         bytes32 /*descriptionHash*/
     ) internal virtual {
         string memory errorMessage = "Governor: call reverted without message";
-        (bool success, bytes memory returndata) = target.call{value: value}(
-            calldatas
-        );
+        (bool success, bytes memory returndata) = target.call{value: value}(calldatas);
         Address.verifyCallResult(success, returndata, errorMessage);
     }
 
@@ -479,12 +378,7 @@ abstract contract Governance is
         bytes memory calldatas,
         bytes32 descriptionHash
     ) internal virtual returns (uint256) {
-        uint256 proposalId = hashProposal(
-            target,
-            value,
-            calldatas,
-            descriptionHash
-        );
+        uint256 proposalId = hashProposal(target, value, calldatas, descriptionHash);
 
         ProposalState currentState = state(proposalId);
 
@@ -507,8 +401,7 @@ abstract contract Governance is
         uint8 support,
         uint256 weight
     ) internal virtual override returns (uint256) {
-        return
-            _castVote(proposalId, voter, support, weight, "", _defaultParams());
+        return _castVote(proposalId, voter, support, weight, "", _defaultParams());
     }
 
     /**
@@ -526,25 +419,15 @@ abstract contract Governance is
         bytes memory params
     ) internal virtual returns (uint256) {
         ProposalState statee = state(proposalId);
-        console.log("Proposal State:", uint8(statee));
-        require(
-            state(proposalId) == ProposalState.Active,
-            "Governance: vote not currently active"
-        );
+        console.log("proposal state in contract: ", uint8(statee));
+        require(state(proposalId) == ProposalState.Active, "Governance: vote not currently active");
 
         _countVote(proposalId, account, support, weight, params);
 
         if (params.length == 0) {
             emit VoteCast(account, proposalId, support, weight, reason);
         } else {
-            emit VoteCastWithParams(
-                account,
-                proposalId,
-                support,
-                weight,
-                reason,
-                params
-            );
+            emit VoteCastWithParams(account, proposalId, support, weight, reason, params);
         }
 
         return weight;
@@ -556,19 +439,9 @@ abstract contract Governance is
      * in a governance proposal to recover tokens or Ether that was sent to the governor contract by mistake.
      * Note that if the executor is simply the governor itself, use of `relay` is redundant.
      */
-    function relay(
-        address target,
-        uint256 value,
-        bytes calldata data
-    ) external payable virtual onlyGovernance {
-        (bool success, bytes memory returndata) = target.call{value: value}(
-            data
-        );
-        Address.verifyCallResult(
-            success,
-            returndata,
-            "Governor: relay reverted without message"
-        );
+    function relay(address target, uint256 value, bytes calldata data) external payable virtual onlyGovernance {
+        (bool success, bytes memory returndata) = target.call{value: value}(data);
+        Address.verifyCallResult(success, returndata, "Governor: relay reverted without message");
     }
 
     /**
@@ -582,12 +455,7 @@ abstract contract Governance is
     /**
      * @dev See {IERC721Receiver-onERC721Received}.
      */
-    function onERC721Received(
-        address,
-        address,
-        uint256,
-        bytes memory
-    ) public virtual override returns (bytes4) {
+    function onERC721Received(address, address, uint256, bytes memory) public virtual override returns (bytes4) {
         return this.onERC721Received.selector;
     }
 

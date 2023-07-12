@@ -7,7 +7,7 @@ import "./GovernanceCountingSimple.sol";
 import "./GovernanceSetting.sol";
 import "./Governance.sol";
 
-contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple {
+contract DAO is Governance, GovernanceSettings, GovernanceCountingSimple {
     using SafeERC20 for IERC20;
 
     event Withdraw(uint256 proposalId, address receiver, uint96 amount);
@@ -25,48 +25,39 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
     constructor(
         string memory _name,
         address _token,
-        uint256 _votingDelay,
         uint256 _votingPeriod,
         uint256 _proposalThreshold,
         uint256 _minTokensForProposal,
         uint256 _minParticipation
     )
         Governance(_name)
-        GovernanceSettings(
-            _votingDelay,
-            _votingPeriod,
-            _proposalThreshold,
-            _minTokensForProposal,
-            _minParticipation
-        )
+        GovernanceSettings(_votingPeriod, _proposalThreshold, _minTokensForProposal, _minParticipation)
     {
         token = IERC20(_token);
+    }
+
+    // Modifier that allows only token holders to vote and create new proposals
+    modifier onlyTokenholders() {
+        if (token.balanceOf(msg.sender) == 0) revert();
+        _;
     }
 
     /**
      * @dev See {IGovernor-propose}. This function has opt-in frontrunning protection, described in {_isValidDescriptionForProposer}.
      */
     function propose(
+        uint256 startTime,
         address target,
         uint256 value,
         bytes memory calldatas,
         string memory description
-    ) public virtual override returns (uint256) {
-        require(
-            token.balanceOf(_msgSender()) >= minTokensForProposal(),
-            "DAO: Not enough tokens to create proposal"
-        );
-        token.safeTransferFrom(
-            _msgSender(),
-            address(this),
-            minTokensForProposal()
-        );
-        uint256 proposalId = super.propose(
-            target,
-            value,
-            calldatas,
-            description
-        );
+    ) public virtual override onlyTokenholders returns (uint256) {
+        require(token.balanceOf(_msgSender()) >= minTokensForProposal(), "DAO: Not enough tokens to create proposal");
+        if(startTime < block.timestamp){
+            startTime = block.timestamp;
+        } 
+        token.safeTransferFrom(_msgSender(), address(this), minTokensForProposal());
+        uint256 proposalId = super.propose(startTime, target, value, calldatas, description);
         _proposalStakeSnapshot[proposalId] = ProposerStake({
             creator: _msgSender(),
             amountStaked: uint96(minTokensForProposal())
@@ -79,10 +70,11 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
         uint256 proposalId,
         uint8 support,
         uint96 weight
-    ) public virtual returns (uint256) {
+    ) public virtual onlyTokenholders returns (uint256) {
         uint96 userBalance = uint96(token.balanceOf(_msgSender()));
         require(userBalance >= weight, "DAO: Not enough voting power");
         token.safeTransferFrom(_msgSender(), address(this), weight);
+        _votingSnapshot[proposalId][_msgSender()] = weight;
 
         return castVoteWithWeight(proposalId, _msgSender(), support, weight);
     }
@@ -118,8 +110,8 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
     function withdraw(uint256 proposalId) external {
         require(
             state(proposalId) == ProposalState.Executed ||
-            state(proposalId) == ProposalState.Expired ||
-            state(proposalId) == ProposalState.Canceled,
+                state(proposalId) == ProposalState.Expired ||
+                state(proposalId) == ProposalState.Canceled,
             "DAO: Proposal is still active"
         );
         uint96 amount = _votingSnapshot[proposalId][_msgSender()];
@@ -137,15 +129,17 @@ contract ChailabsDAO is Governance, GovernanceSettings, GovernanceCountingSimple
         return "";
     }
 
-    function quorum(uint256 timepoint) public view virtual override returns (uint256) {
+    function quorum() public view virtual override returns (uint256) {
         return minParticipation();
     }
 
     // Inline the functions from GovernanceSettings
 
-    function votingDelay() public view override(IGovernance, GovernanceSettings) returns (uint256) { return super.votingDelay(); }
+    function votingPeriod() public view override(IGovernance, GovernanceSettings) returns (uint256) {
+        return super.votingPeriod();
+    }
 
-    function votingPeriod() public view override(IGovernance, GovernanceSettings) returns (uint256) { return super.votingPeriod(); }
-
-    function proposalThreshold() public view override(Governance, GovernanceSettings) returns (uint256){ return super.proposalThreshold(); }
+    function proposalThreshold() public view override(Governance, GovernanceSettings) returns (uint256) {
+        return super.proposalThreshold();
+    }
 }

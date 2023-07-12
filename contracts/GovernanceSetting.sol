@@ -11,13 +11,11 @@ import "./Governance.sol";
  * _Available since v4.4._
  */
 abstract contract GovernanceSettings is Governance {
-    uint256 private _votingDelay;
     uint256 private _votingPeriod;
     uint256 private _proposalThreshold;
     uint256 private _minTokensForProposal;
     uint256 private _minParticipation;
 
-    event VotingDelaySet(uint256 oldVotingDelay, uint256 newVotingDelay);
     event VotingPeriodSet(uint256 oldVotingPeriod, uint256 newVotingPeriod);
     event ProposalThresholdSet(uint256 oldProposalThreshold, uint256 newProposalThreshold);
     event MinTokensForProposalSet(uint256 oldMinTokensForProposal, uint256 newMinTokensForProposal);
@@ -26,19 +24,11 @@ abstract contract GovernanceSettings is Governance {
     /**
      * @dev Initialize the governance parameters.
      */
-    constructor(uint256 initialVotingDelay, uint256 initialVotingPeriod, uint256 initialProposalThreshold, uint256 initialMinTokensForProposal, uint256 initialMinParticipation) {
-        _setVotingDelay(initialVotingDelay);
+    constructor(uint256 initialVotingPeriod, uint256 initialProposalThreshold, uint256 initialMinTokensForProposal, uint256 initialMinParticipation) {
         _setVotingPeriod(initialVotingPeriod);
         _setProposalThreshold(initialProposalThreshold);
         _setMinTokensForProposal(initialMinTokensForProposal);
         _setMinParticipation(initialMinParticipation);
-    }
-
-    /**
-     * @dev See {IGovernor-votingDelay}.
-     */
-    function votingDelay() public view virtual override returns (uint256) {
-        return _votingDelay;
     }
 
     /**
@@ -67,15 +57,6 @@ abstract contract GovernanceSettings is Governance {
      */
     function minParticipation() public view virtual returns (uint256) {
         return _minParticipation;
-    }
-
-    /**
-     * @dev Update the voting delay. This operation can only be performed through a governance proposal.
-     *
-     * Emits a {VotingDelaySet} event.
-     */
-    function setVotingDelay(uint256 newVotingDelay) public virtual onlyGovernance {
-        _setVotingDelay(newVotingDelay);
     }
 
     /**
@@ -112,16 +93,6 @@ abstract contract GovernanceSettings is Governance {
      */
     function setMinParticipation(uint256 newMinParticipation) public virtual onlyGovernance {
         _setMinParticipation(newMinParticipation);
-    }
-
-    /**
-     * @dev Internal setter for the voting delay.
-     *
-     * Emits a {VotingDelaySet} event.
-     */
-    function _setVotingDelay(uint256 newVotingDelay) internal virtual {
-        emit VotingDelaySet(_votingDelay, newVotingDelay);
-        _votingDelay = newVotingDelay;
     }
 
     /**

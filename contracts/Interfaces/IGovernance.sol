@@ -166,16 +166,6 @@ abstract contract IGovernance is IERC165, IERC6372 {
      * This can be increased to leave time for users to buy voting power, or delegate it, before the voting of a
      * proposal starts.
      */
-    function votingDelay() public view virtual returns (uint256);
-
-    /**
-     * @notice module:user-config
-     * @dev Delay between the vote start and vote end. The unit this duration is expressed in depends on the clock
-     * (see EIP-6372) this contract uses.
-     *
-     * NOTE: The {votingDelay} can delay the start of the vote. This must be considered when setting the voting
-     * duration compared to the voting delay.
-     */
     function votingPeriod() public view virtual returns (uint256);
 
     /**
@@ -185,7 +175,7 @@ abstract contract IGovernance is IERC165, IERC6372 {
      * NOTE: The `timepoint` parameter corresponds to the snapshot used for counting vote. This allows to scale the
      * quorum depending on values such as the totalSupply of a token at this timepoint (see {ERC20Votes}).
      */
-    function quorum(uint256 timepoint) public view virtual returns (uint256);
+    function quorum() public view virtual returns (uint256);
 
     /**
      * @notice module:voting
@@ -200,6 +190,7 @@ abstract contract IGovernance is IERC165, IERC6372 {
      * Emits a {ProposalCreated} event.
      */
     function propose(
+        uint256 startTime,
         address target,
         uint256 value,
         bytes memory calldatas,

@@ -4,7 +4,6 @@
 pragma solidity ^0.8.17;
 
 import "./Governance.sol";
-import "hardhat/console.sol";
 
 /**
  * @dev Extension of {Governor} for simple, 3 options, vote counting.
@@ -75,7 +74,7 @@ abstract contract GovernanceCountingSimple is Governance {
     function _quorumReached(uint256 proposalId) internal view virtual override returns (bool) {
         ProposalVote storage proposalVote = _proposalVotes[proposalId];
 
-        return quorum(proposalSnapshot(proposalId)) <= proposalVote.votersCount;
+        return quorum() <= proposalVote.votersCount;
     }
 
     /**
@@ -101,6 +100,7 @@ abstract contract GovernanceCountingSimple is Governance {
 
         require(!proposalVote.hasVoted[account], "GovernanceVotingSimple: vote already cast");
         proposalVote.hasVoted[account] = true;
+        proposalVote.votersCount += 1;
 
         if (support == uint8(VoteType.Against)) {
             proposalVote.againstVotes += weight;
@@ -111,6 +111,5 @@ abstract contract GovernanceCountingSimple is Governance {
         } else {
             revert("GovernanceVotingSimple: invalid value for enum VoteType");
         }
-        proposalVote.votersCount += 1;
     }
 }
